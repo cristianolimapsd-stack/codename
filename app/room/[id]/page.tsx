@@ -358,6 +358,7 @@ export default function RoomPage() {
   const [phase, setPhase] = useState<'lobby' | 'game'>('lobby')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [selectedSpyCards, setSelectedSpyCards] = useState<number[]>([])
+  const [pendingRevealIndex, setPendingRevealIndex] = useState<number | null>(null)
 
   useEffect(() => {
     const stored = localStorage.getItem(`codenames_player_${roomId}`)
@@ -433,6 +434,7 @@ export default function RoomPage() {
 
   useEffect(() => {
     setSelectedSpyCards([])
+    setPendingRevealIndex(null)
   }, [gameState?.currentTurn, gameState?.hint?.word, gameState?.phase])
 
   const updateGameState = useCallback(
@@ -464,6 +466,7 @@ export default function RoomPage() {
     await updateGameState(nextState)
     setPhase(nextState.phase === 'lobby' ? 'lobby' : 'game')
     setSelectedSpyCards([])
+    setPendingRevealIndex(null)
   }
 
   const handleCardClick = async (index: number) => {
@@ -478,7 +481,18 @@ export default function RoomPage() {
 
     if (me.team !== gameState.currentTurn) return
     if (!gameState.hint) return
-    await updateGameState(revealCard(gameState, index))
+    if (gameState.cards[index]?.revealed) return
+    setPendingRevealIndex(index)
+  }
+
+  const handleConfirmReveal = async () => {
+    if (!gameState || pendingRevealIndex === null) return
+    await updateGameState(revealCard(gameState, pendingRevealIndex))
+    setPendingRevealIndex(null)
+  }
+
+  const handleCancelReveal = () => {
+    setPendingRevealIndex(null)
   }
 
   const handleHintSubmit = async () => {
@@ -495,6 +509,7 @@ export default function RoomPage() {
     if (me.team !== gameState.currentTurn) return
     await updateGameState(passTurn(gameState))
     setSelectedSpyCards([])
+    setPendingRevealIndex(null)
   }
 
   const copyCode = () => {
@@ -834,31 +849,47 @@ export default function RoomPage() {
 
             <div className="mx-auto grid w-full max-w-[1080px] grid-cols-5 gap-4">
               {gameState.cards.map((card, index) => {
-                let outerClass = 'border-[#f4d4ac]/55 bg-[linear-gradient(180deg,#f7d9b2_0%,#ecc79a_100%)]'
-                let innerClass = 'border-[#d1aa77] bg-[linear-gradient(180deg,#f8dcba_0%,#f3d1a8_100%)]'
-                let labelClass = 'bg-[linear-gradient(180deg,#b78c60_0%,#9f774f_100%)] text-white'
+                let outerClass =
+                  'border-[#f4d4ac]/55 bg-[linear-gradient(180deg,#f7d9b2_0%,#ecc79a_100%)]'
+                let innerClass =
+                  'border-[#d1aa77] bg-[linear-gradient(180deg,#f8dcba_0%,#f3d1a8_100%)]'
+                let labelClass =
+                  'bg-[linear-gradient(180deg,#b78c60_0%,#9f774f_100%)] text-white'
 
                 if (card.revealed || isSpymaster) {
                   if (card.team === 'red') {
-                    outerClass = 'border-[#ffb09d]/40 bg-[linear-gradient(180deg,#f18a79_0%,#df6d5d_100%)]'
-                    innerClass = 'border-[#efb4ab]/20 bg-[linear-gradient(180deg,#ef7b68_0%,#e36959_100%)]'
-                    labelClass = 'bg-[linear-gradient(180deg,#c84c39_0%,#b6402f_100%)] text-white'
+                    outerClass =
+                      'border-[#ffb09d]/40 bg-[linear-gradient(180deg,#f18a79_0%,#df6d5d_100%)]'
+                    innerClass =
+                      'border-[#efb4ab]/20 bg-[linear-gradient(180deg,#ef7b68_0%,#e36959_100%)]'
+                    labelClass =
+                      'bg-[linear-gradient(180deg,#c84c39_0%,#b6402f_100%)] text-white'
                   } else if (card.team === 'blue') {
-                    outerClass = 'border-[#9fd9ff]/40 bg-[linear-gradient(180deg,#73b8f6_0%,#5a9fe1_100%)]'
-                    innerClass = 'border-[#bee4ff]/20 bg-[linear-gradient(180deg,#67aff0_0%,#4f97dd_100%)]'
-                    labelClass = 'bg-[linear-gradient(180deg,#3f83c9_0%,#2d72b8_100%)] text-white'
+                    outerClass =
+                      'border-[#9fd9ff]/40 bg-[linear-gradient(180deg,#73b8f6_0%,#5a9fe1_100%)]'
+                    innerClass =
+                      'border-[#bee4ff]/20 bg-[linear-gradient(180deg,#67aff0_0%,#4f97dd_100%)]'
+                    labelClass =
+                      'bg-[linear-gradient(180deg,#3f83c9_0%,#2d72b8_100%)] text-white'
                   } else if (card.team === 'neutral') {
-                    outerClass = 'border-[#ecd1aa]/45 bg-[linear-gradient(180deg,#e2c79e_0%,#d6b58a_100%)]'
-                    innerClass = 'border-[#f2dfc5]/20 bg-[linear-gradient(180deg,#dbc096_0%,#cfaf84_100%)]'
-                    labelClass = 'bg-[linear-gradient(180deg,#b58d5e_0%,#9f794f_100%)] text-white'
+                    outerClass =
+                      'border-[#ecd1aa]/45 bg-[linear-gradient(180deg,#e2c79e_0%,#d6b58a_100%)]'
+                    innerClass =
+                      'border-[#f2dfc5]/20 bg-[linear-gradient(180deg,#dbc096_0%,#cfaf84_100%)]'
+                    labelClass =
+                      'bg-[linear-gradient(180deg,#b58d5e_0%,#9f794f_100%)] text-white'
                   } else {
-                    outerClass = 'border-white/15 bg-[linear-gradient(180deg,#313131_0%,#1f1f1f_100%)]'
-                    innerClass = 'border-white/10 bg-[linear-gradient(180deg,#242424_0%,#171717_100%)]'
-                    labelClass = 'bg-[linear-gradient(180deg,#101010_0%,#0a0a0a_100%)] text-white'
+                    outerClass =
+                      'border-white/15 bg-[linear-gradient(180deg,#313131_0%,#1f1f1f_100%)]'
+                    innerClass =
+                      'border-white/10 bg-[linear-gradient(180deg,#242424_0%,#171717_100%)]'
+                    labelClass =
+                      'bg-[linear-gradient(180deg,#101010_0%,#0a0a0a_100%)] text-white'
                   }
                 }
 
                 const spySelected = selectedSpyCards.includes(index)
+                const pendingReveal = pendingRevealIndex === index
 
                 return (
                   <button
@@ -868,10 +899,45 @@ export default function RoomPage() {
                     className={cn(
                       'group relative rounded-[22px] border p-2.5 text-left shadow-[0_16px_28px_rgba(0,0,0,0.22)] transition duration-150',
                       outerClass,
-                      !card.revealed && (canReveal || isSpymaster) && 'hover:-translate-y-1 hover:shadow-[0_20px_34px_rgba(0,0,0,0.28)]',
-                      spySelected && 'ring-4 ring-[#8dff61] ring-offset-2 ring-offset-[#243d56]'
+                      !card.revealed &&
+                        (canReveal || isSpymaster) &&
+                        'hover:-translate-y-1 hover:shadow-[0_20px_34px_rgba(0,0,0,0.28)]',
+                      spySelected && 'ring-4 ring-[#8dff61] ring-offset-2 ring-offset-[#243d56]',
+                      pendingReveal && 'scale-[1.02] ring-4 ring-white ring-offset-2 ring-offset-[#243d56]'
                     )}
                   >
+                    {me?.role === 'operative' && pendingReveal ? (
+                      <div className="absolute left-1/2 top-2 z-10 -translate-x-1/2 rounded-full bg-[#0d1017] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-lg">
+                        Clique para confirmar
+                      </div>
+                    ) : null}
+
+                    {me?.role === 'operative' && pendingReveal ? (
+                      <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            handleConfirmReveal()
+                          }}
+                          className="flex h-11 w-11 items-center justify-center rounded-full border border-[#baff8c]/50 bg-[#45bb18] text-xl text-white shadow-[0_8px_18px_rgba(69,187,24,0.35)] transition hover:brightness-110"
+                          aria-label="Confirmar carta"
+                        >
+                          ☝
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            handleCancelReveal()
+                          }}
+                          className="rounded-full border border-white/20 bg-[#111722] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white/80 transition hover:bg-white/10"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : null}
+
                     <div className={cn('rounded-[18px] border p-2.5', innerClass)}>
                       <div className="rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.03))] px-3 py-4">
                         <div
@@ -905,7 +971,9 @@ export default function RoomPage() {
                     key={index}
                     className={cn(
                       'rounded-full px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em]',
-                      hint.team === 'red' ? 'bg-[#d85b49]/15 text-[#ff9d90]' : 'bg-[#3f8ed8]/15 text-[#8dccff]'
+                      hint.team === 'red'
+                        ? 'bg-[#d85b49]/15 text-[#ff9d90]'
+                        : 'bg-[#3f8ed8]/15 text-[#8dccff]'
                     )}
                   >
                     {hint.word} x{hint.count}
