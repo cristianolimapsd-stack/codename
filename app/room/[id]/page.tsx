@@ -560,12 +560,12 @@ export default function RoomPage() {
 
   const handleStartGame = async () => {
     if (!extendedState) return
-    const startingTeam = randomTeam()
     const newState: ExtendedGameState = {
       ...extendedState,
       phase: 'playing',
-      currentTurn: startingTeam,
+      currentTurn: randomTeam(),
       hint: null,
+      winner: null,
       roomAdminId: extendedState.roomAdminId ?? players[0]?.id,
       detailedHintHistory: [],
     }
@@ -579,9 +579,12 @@ export default function RoomPage() {
     const nextState = createInitialState(themes, []) as ExtendedGameState
     nextState.roomAdminId = extendedState.roomAdminId ?? players[0]?.id
     nextState.detailedHintHistory = []
+    nextState.phase = 'playing'
     nextState.currentTurn = randomTeam()
+    nextState.hint = null
+    nextState.winner = null
     await updateGameState(nextState)
-    setPhase(nextState.phase === 'lobby' ? 'lobby' : 'game')
+    setPhase('game')
     setPendingRevealIndex(null)
     setSpySelections([])
   }
@@ -611,6 +614,7 @@ export default function RoomPage() {
     const chosenCard = extendedState.cards[pendingRevealIndex]
     if (!chosenCard) return
 
+    const previousTurn = extendedState.currentTurn
     let nextState = revealCard(extendedState, pendingRevealIndex) as ExtendedGameState
 
     const hitNeutral = chosenCard.team === 'neutral'
@@ -619,7 +623,12 @@ export default function RoomPage() {
         ? chosenCard.team !== me.team
         : false
 
-    if ((hitNeutral || hitEnemy) && nextState.phase === 'playing') {
+    const shouldForcePass =
+      nextState.phase === 'playing' &&
+      nextState.currentTurn === previousTurn &&
+      (hitNeutral || hitEnemy)
+
+    if (shouldForcePass) {
       nextState = passTurn(nextState) as ExtendedGameState
     }
 
