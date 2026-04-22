@@ -59,19 +59,19 @@ export const valorantWords: string[] = [
   'Orbe', 'Spike', 'Defuse', 'Plant', 'Rush', 'Eco',
   'Full-buy', 'Half-buy', 'Save', 'Clutch', 'Ace',
   // Termos de jogo
-  'Valorant', 'Radianite', 'Radiant', 'Immortal', 'Ascendant',
+  'Valorant', 'Radianita', 'Radiant', 'Imortal', 'Ascendente',
   'Diamante', 'Platina', 'Ouro', 'Prata', 'Bronze', 'Ferro',
   // Termos táticos
   'Flank', 'Entry', 'Lurk', 'Rotate', 'Retake', 'Peek',
   'Smoke', 'Flash', 'Molly', 'Util', 'Trade', 'Swing',
   'Crossfire', 'Post-plant', 'Anti-eco',
   // Locais comuns
-  'A-site', 'B-site', 'Mid', 'CT', 'Heaven', 'Catwalk',
+  'A-site', 'B-site', 'Mid', 'CT', 'Heaven',
   'Short', 'Long', 'Cubby',
   // Organizações
-  'VALORANT', 'VCT', 'Sentinels', 'NRG', 'Loud', 'Fnatic',
-  // Outros
-  'Agente', 'Agência', 'Protocolo', 'Radium', 'Kingdom',
+  'VALORANT', 'VCT', 'Sentinels', 'NRG', 'Loud', 'Fnatic', 'MIBR', 'KRU',
+  // Players
+  'Sacy', 'Aspas', 'Zekken', 'MwZera', 'TenZ', 'TcK', 'Coreano', 'Xarola',
 ]
 
 // Combina os dois bancos sem duplicatas
