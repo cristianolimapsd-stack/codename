@@ -63,7 +63,7 @@ export const valorantWords: string[] = [
   'Diamante', 'Platina', 'Ouro', 'Prata', 'Bronze', 'Ferro',
   // Termos táticos
   'Flank', 'Entry', 'Lurk', 'Rotate', 'Retake', 'Peek',
-  'Smoke', 'Flash', 'Molly', 'Util', 'Trade', 'Swing',
+  'Smoke', 'Flash', 'Molly', 'Util', 'Trade',
   'Crossfire', 'Post-plant', 'Anti-eco',
   // Locais comuns
   'A-site', 'B-site', 'Mid', 'CT', 'Heaven',
