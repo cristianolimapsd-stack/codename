@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { revealCard, applyHint, passTurn, createInitialState } from '@/lib/gameLogic'
-import type { GameState, Player, PlayerTeam, PlayerRole } from '@/types/game'
+import { applyHint, createInitialState, passTurn, revealCard } from '@/lib/gameLogic'
+import type { GameState, Player, PlayerRole, PlayerTeam } from '@/types/game'
 
 const TEAM_SURFACES = {
   red: {
@@ -31,6 +31,18 @@ const AVATAR_PALETTE = [
   { shell: 'from-[#d7ffd8] to-[#77e286]', plate: 'bg-[#1f6b32]' },
 ]
 
+type DetailedHintEntry = {
+  word: string
+  count: number
+  team: PlayerTeam
+  picks: string[]
+}
+
+type ExtendedGameState = GameState & {
+  roomAdminId?: string
+  detailedHintHistory?: DetailedHintEntry[]
+}
+
 function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(' ')
 }
@@ -53,25 +65,6 @@ function getThemesFromState(gameState: GameState) {
   if (Array.isArray(gameState.theme)) return gameState.theme
   if (typeof gameState.theme === 'string' && gameState.theme.trim()) return [gameState.theme]
   return ['geral']
-}
-
-type PendingSelection = {
-  index: number
-  name: string
-  team: PlayerTeam
-}
-
-type DetailedHintEntry = {
-  word: string
-  count: number
-  team: PlayerTeam
-  picks: string[]
-}
-
-type ExtendedGameState = GameState & {
-  roomAdminId?: string
-  pendingSelections?: Record<string, PendingSelection>
-  detailedHintHistory?: DetailedHintEntry[]
 }
 
 function asExtendedState(state: GameState | null) {
@@ -101,6 +94,7 @@ function PersonBadge({
           👑
         </div>
       ) : null}
+
       <div
         className={cn(
           'relative flex items-center justify-center rounded-full border border-white/30 bg-gradient-to-br shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]',
@@ -118,6 +112,7 @@ function PersonBadge({
           <circle cx="32" cy="22" r="12" fill="rgba(255,255,255,0.82)" />
           <path d="M14 55c2-10 10-16 18-16s16 6 18 16" fill="rgba(255,255,255,0.82)" />
         </svg>
+
         <div
           className={cn(
             'absolute rounded-full px-2 py-1 text-center font-black text-white',
@@ -140,9 +135,7 @@ type RoleCardProps = {
   onClick: () => void
 }
 
-function RoleCard(props: RoleCardProps) {
-  const { title, placeholder, occupiedBy, active, onClick } = props
-
+function RoleCard({ title, placeholder, occupiedBy, active, onClick }: RoleCardProps) {
   return (
     <div className="mt-3 rounded-[22px] border border-white/15 bg-black/12 px-4 py-4 text-center">
       <p className="text-center text-[11px] font-black uppercase tracking-[0.22em] text-white/60">
@@ -153,11 +146,9 @@ function RoleCard(props: RoleCardProps) {
         {occupiedBy ? (
           <>
             <PersonBadge name={occupiedBy.name} crowned={active} />
-            <div>
-              <p className="text-[12px] uppercase tracking-[0.2em] text-white/55">
-                {occupiedBy.role === 'spymaster' ? 'Mestre-Espiao' : 'Agente'}
-              </p>
-            </div>
+            <p className="text-[12px] uppercase tracking-[0.2em] text-white/55">
+              {occupiedBy.role === 'spymaster' ? 'Mestre-Espiao' : 'Agente'}
+            </p>
           </>
         ) : (
           <>
@@ -463,6 +454,7 @@ export default function RoomPage() {
   const [phase, setPhase] = useState<'lobby' | 'game'>('lobby')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [pendingRevealIndex, setPendingRevealIndex] = useState<number | null>(null)
+  const [spySelections, setSpySelections] = useState<number[]>([])
 
   const extendedState = asExtendedState(gameState)
 
@@ -540,6 +532,7 @@ export default function RoomPage() {
 
   useEffect(() => {
     setPendingRevealIndex(null)
+    setSpySelections([])
   }, [gameState?.currentTurn, gameState?.hint?.word, gameState?.phase])
 
   const isAdmin = useMemo(() => {
@@ -552,31 +545,6 @@ export default function RoomPage() {
       await supabase.from('rooms').update({ state: newState }).eq('id', roomId)
     },
     [roomId]
-  )
-
-  const updatePendingSelection = useCallback(
-    async (index: number | null) => {
-      if (!extendedState || !me) return
-
-      const pendingSelections = { ...(extendedState.pendingSelections || {}) }
-
-      if (index === null) {
-        delete pendingSelections[me.id]
-      } else {
-        pendingSelections[me.id] = {
-          index,
-          name: me.name,
-          team: me.team,
-        }
-      }
-
-      await updateGameState({
-        ...extendedState,
-        pendingSelections,
-        roomAdminId: extendedState.roomAdminId ?? players[0]?.id,
-      })
-    },
-    [extendedState, me, players, updateGameState]
   )
 
   const handleSetTeamRole = async (team: PlayerTeam, role: PlayerRole) => {
@@ -592,6 +560,7 @@ export default function RoomPage() {
       ...extendedState,
       phase: 'playing',
       roomAdminId: extendedState.roomAdminId ?? players[0]?.id,
+      detailedHintHistory: extendedState.detailedHintHistory || [],
     }
     await updateGameState(newState)
     setPhase('game')
@@ -602,46 +571,42 @@ export default function RoomPage() {
     const themes = getThemesFromState(extendedState)
     const nextState = createInitialState(themes, []) as ExtendedGameState
     nextState.roomAdminId = extendedState.roomAdminId ?? players[0]?.id
-    nextState.pendingSelections = {}
     nextState.detailedHintHistory = []
     await updateGameState(nextState)
     setPhase(nextState.phase === 'lobby' ? 'lobby' : 'game')
     setPendingRevealIndex(null)
+    setSpySelections([])
   }
 
   const handleCardClick = async (index: number) => {
     if (!extendedState || !me) return
 
     if (me.role === 'spymaster') {
-      const activeSelections = extendedState.pendingSelections || {}
-      const alreadySelected = activeSelections[me.id]?.index === index
-      await updatePendingSelection(alreadySelected ? null : index)
+      setSpySelections((current) =>
+        current.includes(index) ? current.filter((value) => value !== index) : [...current, index]
+      )
       return
     }
 
     if (me.team !== extendedState.currentTurn) return
     if (!extendedState.hint) return
     if (extendedState.cards[index]?.revealed) return
-
     setPendingRevealIndex(index)
-    await updatePendingSelection(index)
   }
 
   const handleConfirmReveal = async () => {
-    if (!extendedState || pendingRevealIndex === null || !me) return
+    if (!extendedState || pendingRevealIndex === null) return
 
     const nextState = revealCard(extendedState, pendingRevealIndex) as ExtendedGameState
-    const pendingSelections = { ...(extendedState.pendingSelections || {}) }
-    delete pendingSelections[me.id]
-
     const lastHistory = [...(extendedState.detailedHintHistory || [])]
+
     if (lastHistory.length > 0) {
-      const targetWord = extendedState.cards[pendingRevealIndex]?.word
+      const word = extendedState.cards[pendingRevealIndex]?.word
       const lastEntry = lastHistory[lastHistory.length - 1]
-      if (targetWord && !lastEntry.picks.includes(targetWord)) {
+      if (word && !lastEntry.picks.includes(word)) {
         lastHistory[lastHistory.length - 1] = {
           ...lastEntry,
-          picks: [...lastEntry.picks, targetWord],
+          picks: [...lastEntry.picks, word],
         }
       }
     }
@@ -649,9 +614,9 @@ export default function RoomPage() {
     await updateGameState({
       ...nextState,
       roomAdminId: extendedState.roomAdminId ?? players[0]?.id,
-      pendingSelections,
       detailedHintHistory: lastHistory,
     })
+
     setPendingRevealIndex(null)
   }
 
@@ -664,7 +629,6 @@ export default function RoomPage() {
     await updateGameState({
       ...nextState,
       roomAdminId: extendedState.roomAdminId ?? players[0]?.id,
-      pendingSelections: {},
       detailedHintHistory: [
         ...(extendedState.detailedHintHistory || []),
         {
@@ -678,6 +642,7 @@ export default function RoomPage() {
 
     setHintWord('')
     setHintCount(1)
+    setSpySelections([])
     setPendingRevealIndex(null)
   }
 
@@ -686,17 +651,14 @@ export default function RoomPage() {
     if (me.team !== extendedState.currentTurn) return
 
     const nextState = passTurn(extendedState) as ExtendedGameState
-    const pendingSelections = { ...(extendedState.pendingSelections || {}) }
-    delete pendingSelections[me.id]
-
     await updateGameState({
       ...nextState,
       roomAdminId: extendedState.roomAdminId ?? players[0]?.id,
-      pendingSelections,
       detailedHintHistory: extendedState.detailedHintHistory || [],
     })
 
     setPendingRevealIndex(null)
+    setSpySelections([])
   }
 
   const copyCode = () => {
@@ -737,7 +699,6 @@ export default function RoomPage() {
   const isSpymaster = me?.role === 'spymaster'
   const canReveal = isMyTurn && !isSpymaster && !!extendedState.hint && extendedState.phase === 'playing'
   const canGiveHint = isMyTurn && isSpymaster && !extendedState.hint && extendedState.phase === 'playing'
-  const pendingSelections = Object.entries(extendedState.pendingSelections || {})
 
   if (phase === 'lobby') {
     return (
@@ -828,7 +789,7 @@ export default function RoomPage() {
             />
 
             <main className="flex min-h-0 flex-col items-center justify-center rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,20,32,0.88),rgba(30,53,77,0.65))] p-4 shadow-2xl backdrop-blur-md">
-              <div className="grid w-full max-w-[980px] grid-cols-5 gap-3">
+              <div className="grid w-full max-w-[1120px] grid-cols-5 gap-3">
                 {extendedState.cards.map((card, index) => {
                   const { outerClass, innerClass, labelClass } = getCardClasses(card.team, false)
 
@@ -836,7 +797,7 @@ export default function RoomPage() {
                     <div
                       key={`${card.word}-${index}`}
                       className={cn(
-                        'aspect-[1.12/0.84] rounded-[20px] border p-2 shadow-[0_16px_26px_rgba(0,0,0,0.16)]',
+                        'aspect-[1.28/0.74] rounded-[20px] border p-2 shadow-[0_16px_26px_rgba(0,0,0,0.16)]',
                         outerClass
                       )}
                     >
@@ -844,7 +805,7 @@ export default function RoomPage() {
                         <div className="flex h-full rounded-[14px] border border-white/20 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.05))] p-2">
                           <div
                             className={cn(
-                              'flex w-full items-center justify-center rounded-[12px] px-2 text-center text-[clamp(0.82rem,1.05vw,1.05rem)] font-black uppercase tracking-[0.03em] leading-tight break-words',
+                              'flex w-full items-center justify-center rounded-[12px] px-3 text-center text-[clamp(0.74rem,0.9vw,1rem)] font-black uppercase tracking-[0.01em] leading-[1.02] [overflow-wrap:anywhere]',
                               labelClass
                             )}
                           >
@@ -881,7 +842,7 @@ export default function RoomPage() {
         onPickRole={handleSetTeamRole}
       />
 
-      <div className="mx-auto flex h-screen w-full max-w-[1720px] flex-col px-4 py-3">
+      <div className="mx-auto flex h-screen w-full max-w-[1760px] flex-col px-4 py-3">
         <header className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-md">
           <div className="flex items-center gap-2">
             <div className="text-xl font-black uppercase tracking-[0.08em]">
@@ -933,12 +894,12 @@ export default function RoomPage() {
               <span className="text-white/45">restantes</span>
               <span className="mx-3 font-black text-[#78bfff]">{extendedState.blueLeft}</span>
             </div>
-            {extendedState.phase === 'finished' && isAdmin ? (
+            {isAdmin ? (
               <button
                 onClick={handleRematch}
                 className="rounded-full border border-[#8cd45c]/45 bg-gradient-to-b from-[#35c000] to-[#247d00] px-5 py-2.5 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-[0_12px_30px_rgba(37,125,0,0.35)] transition hover:brightness-110"
               >
-                Recriar sala
+                Recomeçar sala
               </button>
             ) : null}
           </div>
@@ -1032,14 +993,12 @@ export default function RoomPage() {
             </div>
 
             <div className="grid min-h-0 flex-1 place-items-center">
-              <div className="grid w-full max-w-[1020px] grid-cols-5 gap-3">
+              <div className="grid w-full max-w-[1140px] grid-cols-5 gap-3">
                 {extendedState.cards.map((card, index) => {
                   const visible = card.revealed || isSpymaster
                   const { outerClass, innerClass, labelClass } = getCardClasses(card.team, visible)
-                  const cardSelections = pendingSelections.filter(
-                    ([, selection]) => selection.index === index
-                  )
                   const pendingReveal = pendingRevealIndex === index
+                  const spySelected = isSpymaster && spySelections.includes(index)
 
                   return (
                     <button
@@ -1047,34 +1006,15 @@ export default function RoomPage() {
                       onClick={() => handleCardClick(index)}
                       disabled={me?.role !== 'spymaster' && (!canReveal || card.revealed)}
                       className={cn(
-                        'group relative aspect-[1.14/0.82] rounded-[20px] border p-2 text-left shadow-[0_14px_24px_rgba(0,0,0,0.2)] transition duration-150',
+                        'group relative aspect-[1.28/0.74] rounded-[20px] border p-2 text-left shadow-[0_14px_24px_rgba(0,0,0,0.2)] transition duration-150',
                         outerClass,
                         !card.revealed &&
                           (canReveal || isSpymaster) &&
                           'hover:-translate-y-0.5 hover:shadow-[0_18px_28px_rgba(0,0,0,0.26)]',
-                        pendingReveal && 'ring-4 ring-white ring-offset-2 ring-offset-[#243d56]'
+                        pendingReveal && 'ring-4 ring-white ring-offset-2 ring-offset-[#243d56]',
+                        spySelected && 'ring-4 ring-[#8dff61] ring-offset-2 ring-offset-[#243d56]'
                       )}
                     >
-                      {cardSelections.length > 0 ? (
-                        <div className="absolute left-2 top-2 z-10 flex -space-x-2">
-                          {cardSelections.slice(0, 3).map(([playerId, selection]) => (
-                            <div
-                              key={playerId}
-                              className={cn(
-                                'rounded-full border-2 border-white/80',
-                                selection.team === 'red'
-                                  ? 'bg-[#d85b49]'
-                                  : selection.team === 'blue'
-                                    ? 'bg-[#3f8ed8]'
-                                    : 'bg-[#8b8b8b]'
-                              )}
-                            >
-                              <PersonBadge name={selection.name} small />
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-
                       {me?.role === 'operative' && pendingReveal ? (
                         <button
                           type="button"
@@ -1089,11 +1029,17 @@ export default function RoomPage() {
                         </button>
                       ) : null}
 
+                      {isSpymaster && spySelected ? (
+                        <div className="absolute right-2 top-2 z-10 rounded-full bg-[#3ea900] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-lg">
+                          Selecionada
+                        </div>
+                      ) : null}
+
                       <div className={cn('flex h-full rounded-[16px] border p-2', innerClass)}>
                         <div className="flex h-full w-full rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.03))] p-2">
                           <div
                             className={cn(
-                              'flex w-full items-center justify-center rounded-[12px] px-2 text-center text-[clamp(0.82rem,1vw,1.14rem)] font-black uppercase tracking-[0.03em] leading-tight break-words',
+                              'flex w-full items-center justify-center rounded-[12px] px-3 text-center text-[clamp(0.74rem,0.9vw,1rem)] font-black uppercase tracking-[0.01em] leading-[1.02] [overflow-wrap:anywhere]',
                               labelClass
                             )}
                           >
