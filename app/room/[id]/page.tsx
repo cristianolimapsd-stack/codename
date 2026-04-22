@@ -427,9 +427,9 @@ function getCardClasses(team: GameState['cards'][number]['team'], visible: boole
       innerClass = 'border-[#bee4ff]/20 bg-[linear-gradient(180deg,#67aff0_0%,#4f97dd_100%)]'
       labelClass = 'bg-[linear-gradient(180deg,#3f83c9_0%,#2d72b8_100%)] text-white'
     } else if (team === 'neutral') {
-      outerClass = 'border-[#ecd1aa]/45 bg-[linear-gradient(180deg,#e2c79e_0%,#d6b58a_100%)]'
-      innerClass = 'border-[#f2dfc5]/20 bg-[linear-gradient(180deg,#dbc096_0%,#cfaf84_100%)]'
-      labelClass = 'bg-[linear-gradient(180deg,#b58d5e_0%,#9f794f_100%)] text-white'
+      outerClass = 'border-[#d8f6cb]/45 bg-[linear-gradient(180deg,#c9f0bb_0%,#aadf96_100%)]'
+      innerClass = 'border-[#e3ffd8]/20 bg-[linear-gradient(180deg,#b9e7a8_0%,#96cc80_100%)]'
+      labelClass = 'bg-[linear-gradient(180deg,#6ba45d_0%,#558949_100%)] text-white'
     } else {
       outerClass = 'border-white/15 bg-[linear-gradient(180deg,#313131_0%,#1f1f1f_100%)]'
       innerClass = 'border-white/10 bg-[linear-gradient(180deg,#242424_0%,#171717_100%)]'
@@ -582,6 +582,9 @@ export default function RoomPage() {
     if (!extendedState || !me) return
 
     if (me.role === 'spymaster') {
+      const card = extendedState.cards[index]
+      if (!card) return
+      if (card.team !== me.team) return
       setSpySelections((current) =>
         current.includes(index) ? current.filter((value) => value !== index) : [...current, index]
       )
@@ -595,13 +598,22 @@ export default function RoomPage() {
   }
 
   const handleConfirmReveal = async () => {
-    if (!extendedState || pendingRevealIndex === null) return
+    if (!extendedState || pendingRevealIndex === null || !me) return
 
-    const nextState = revealCard(extendedState, pendingRevealIndex) as ExtendedGameState
+    const chosenCard = extendedState.cards[pendingRevealIndex]
+    let nextState = revealCard(extendedState, pendingRevealIndex) as ExtendedGameState
+
+    if (
+      chosenCard &&
+      chosenCard.team !== 'assassin' &&
+      chosenCard.team !== me.team
+    ) {
+      nextState = passTurn(nextState) as ExtendedGameState
+    }
+
     const lastHistory = [...(extendedState.detailedHintHistory || [])]
-
     if (lastHistory.length > 0) {
-      const word = extendedState.cards[pendingRevealIndex]?.word
+      const word = chosenCard?.word
       const lastEntry = lastHistory[lastHistory.length - 1]
       if (word && !lastEntry.picks.includes(word)) {
         lastHistory[lastHistory.length - 1] = {
@@ -985,7 +997,7 @@ export default function RoomPage() {
                 <div className="rounded-full border border-white/10 bg-white/5 px-5 py-3 text-xs uppercase tracking-[0.2em] text-white/35">
                   {extendedState.phase === 'playing'
                     ? isSpymaster
-                      ? 'Clique nas cartas para marcar sua leitura'
+                      ? 'Clique nas cartas do seu time para marcar sua leitura'
                       : 'Aguardando a dica do mestre-espiao'
                     : 'Partida pausada'}
                 </div>
