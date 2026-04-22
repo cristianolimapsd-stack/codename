@@ -71,6 +71,10 @@ function asExtendedState(state: GameState | null) {
   return state as ExtendedGameState | null
 }
 
+function randomTeam(): 'red' | 'blue' {
+  return Math.random() < 0.5 ? 'red' : 'blue'
+}
+
 function PersonBadge({
   name,
   crowned = false,
@@ -427,9 +431,9 @@ function getCardClasses(team: GameState['cards'][number]['team'], visible: boole
       innerClass = 'border-[#bee4ff]/20 bg-[linear-gradient(180deg,#67aff0_0%,#4f97dd_100%)]'
       labelClass = 'bg-[linear-gradient(180deg,#3f83c9_0%,#2d72b8_100%)] text-white'
     } else if (team === 'neutral') {
-      outerClass = 'border-[#d8f6cb]/45 bg-[linear-gradient(180deg,#c9f0bb_0%,#aadf96_100%)]'
-      innerClass = 'border-[#e3ffd8]/20 bg-[linear-gradient(180deg,#b9e7a8_0%,#96cc80_100%)]'
-      labelClass = 'bg-[linear-gradient(180deg,#6ba45d_0%,#558949_100%)] text-white'
+      outerClass = 'border-[#ead3ae]/45 bg-[linear-gradient(180deg,#e8d1ac_0%,#d9bf97_100%)]'
+      innerClass = 'border-[#f4e2c7]/20 bg-[linear-gradient(180deg,#dfc7a2_0%,#cfb187_100%)]'
+      labelClass = 'bg-[linear-gradient(180deg,#b79263_0%,#9f7a50_100%)] text-white'
     } else {
       outerClass = 'border-white/15 bg-[linear-gradient(180deg,#313131_0%,#1f1f1f_100%)]'
       innerClass = 'border-white/10 bg-[linear-gradient(180deg,#242424_0%,#171717_100%)]'
@@ -556,11 +560,14 @@ export default function RoomPage() {
 
   const handleStartGame = async () => {
     if (!extendedState) return
+    const startingTeam = randomTeam()
     const newState: ExtendedGameState = {
       ...extendedState,
       phase: 'playing',
+      currentTurn: startingTeam,
+      hint: null,
       roomAdminId: extendedState.roomAdminId ?? players[0]?.id,
-      detailedHintHistory: extendedState.detailedHintHistory || [],
+      detailedHintHistory: [],
     }
     await updateGameState(newState)
     setPhase('game')
@@ -572,6 +579,7 @@ export default function RoomPage() {
     const nextState = createInitialState(themes, []) as ExtendedGameState
     nextState.roomAdminId = extendedState.roomAdminId ?? players[0]?.id
     nextState.detailedHintHistory = []
+    nextState.currentTurn = randomTeam()
     await updateGameState(nextState)
     setPhase(nextState.phase === 'lobby' ? 'lobby' : 'game')
     setPendingRevealIndex(null)
@@ -601,19 +609,23 @@ export default function RoomPage() {
     if (!extendedState || pendingRevealIndex === null || !me) return
 
     const chosenCard = extendedState.cards[pendingRevealIndex]
+    if (!chosenCard) return
+
     let nextState = revealCard(extendedState, pendingRevealIndex) as ExtendedGameState
 
-    if (
-      chosenCard &&
-      chosenCard.team !== 'assassin' &&
-      chosenCard.team !== me.team
-    ) {
+    const hitNeutral = chosenCard.team === 'neutral'
+    const hitEnemy =
+      chosenCard.team === 'red' || chosenCard.team === 'blue'
+        ? chosenCard.team !== me.team
+        : false
+
+    if ((hitNeutral || hitEnemy) && nextState.phase === 'playing') {
       nextState = passTurn(nextState) as ExtendedGameState
     }
 
     const lastHistory = [...(extendedState.detailedHintHistory || [])]
     if (lastHistory.length > 0) {
-      const word = chosenCard?.word
+      const word = chosenCard.word
       const lastEntry = lastHistory[lastHistory.length - 1]
       if (word && !lastEntry.picks.includes(word)) {
         lastHistory[lastHistory.length - 1] = {
