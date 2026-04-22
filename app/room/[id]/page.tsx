@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { revealCard, applyHint, passTurn, createInitialState } from '@/lib/gameLogic'
@@ -23,6 +23,14 @@ const TEAM_SURFACES = {
   },
 } as const
 
+const AVATAR_PALETTE = [
+  { shell: 'from-[#ffe4a8] to-[#ffbf5d]', plate: 'bg-[#7a4300]' },
+  { shell: 'from-[#d5f1ff] to-[#7cc7ff]', plate: 'bg-[#0b4b7e]' },
+  { shell: 'from-[#ffd1d1] to-[#ff8d8d]', plate: 'bg-[#7d1d1d]' },
+  { shell: 'from-[#e0dcff] to-[#a79cff]', plate: 'bg-[#43327d]' },
+  { shell: 'from-[#d7ffd8] to-[#77e286]', plate: 'bg-[#1f6b32]' },
+]
+
 function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(' ')
 }
@@ -36,27 +44,88 @@ function getInitials(name: string) {
     .join('')
 }
 
+function getAvatarTheme(seed: string) {
+  const total = seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+  return AVATAR_PALETTE[total % AVATAR_PALETTE.length]
+}
+
 function getThemesFromState(gameState: GameState) {
   if (Array.isArray(gameState.theme)) return gameState.theme
   if (typeof gameState.theme === 'string' && gameState.theme.trim()) return [gameState.theme]
   return ['geral']
 }
 
-function PersonBadge({ name, crowned = false }: { name: string; crowned?: boolean }) {
+type PendingSelection = {
+  index: number
+  name: string
+  team: PlayerTeam
+}
+
+type DetailedHintEntry = {
+  word: string
+  count: number
+  team: PlayerTeam
+  picks: string[]
+}
+
+type ExtendedGameState = GameState & {
+  roomAdminId?: string
+  pendingSelections?: Record<string, PendingSelection>
+  detailedHintHistory?: DetailedHintEntry[]
+}
+
+function asExtendedState(state: GameState | null) {
+  return state as ExtendedGameState | null
+}
+
+function PersonBadge({
+  name,
+  crowned = false,
+  small = false,
+}: {
+  name: string
+  crowned?: boolean
+  small?: boolean
+}) {
+  const avatarTheme = getAvatarTheme(name)
+
   return (
     <div className="relative flex flex-col items-center">
       {crowned ? (
-        <div className="absolute -left-1 top-0 z-10 text-[28px] drop-shadow-[0_6px_12px_rgba(0,0,0,0.35)]">
+        <div
+          className={cn(
+            'absolute z-10 drop-shadow-[0_6px_12px_rgba(0,0,0,0.35)]',
+            small ? '-left-1 top-0 text-xl' : '-left-1 top-0 text-[28px]'
+          )}
+        >
           👑
         </div>
       ) : null}
-      <div className="relative flex h-24 w-24 items-center justify-center rounded-full border border-white/30 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.35),rgba(255,255,255,0.08))] shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]">
-        <svg width="54" height="54" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <div
+        className={cn(
+          'relative flex items-center justify-center rounded-full border border-white/30 bg-gradient-to-br shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]',
+          avatarTheme.shell,
+          small ? 'h-12 w-12' : 'h-24 w-24'
+        )}
+      >
+        <svg
+          width={small ? 26 : 54}
+          height={small ? 26 : 54}
+          viewBox="0 0 64 64"
+          fill="none"
+          aria-hidden="true"
+        >
           <circle cx="32" cy="22" r="12" fill="rgba(255,255,255,0.82)" />
           <path d="M14 55c2-10 10-16 18-16s16 6 18 16" fill="rgba(255,255,255,0.82)" />
         </svg>
-        <div className="absolute inset-x-3 bottom-2 rounded-full bg-[#0b3050]/85 px-2 py-1 text-center text-sm font-black text-white">
-          {name}
+        <div
+          className={cn(
+            'absolute rounded-full px-2 py-1 text-center font-black text-white',
+            avatarTheme.plate,
+            small ? 'inset-x-1 bottom-1 text-[9px]' : 'inset-x-3 bottom-2 text-sm'
+          )}
+        >
+          {small ? getInitials(name) : name}
         </div>
       </div>
     </div>
@@ -75,29 +144,29 @@ function RoleCard(props: RoleCardProps) {
   const { title, placeholder, occupiedBy, active, onClick } = props
 
   return (
-    <div className="mt-5 rounded-[24px] border border-white/15 bg-black/12 px-5 py-5 text-center">
-      <p className="text-center text-[12px] font-black uppercase tracking-[0.22em] text-white/60">
+    <div className="mt-3 rounded-[22px] border border-white/15 bg-black/12 px-4 py-4 text-center">
+      <p className="text-center text-[11px] font-black uppercase tracking-[0.22em] text-white/60">
         {title}
       </p>
 
-      <div className="mt-4 flex min-h-[172px] flex-col items-center justify-center gap-3">
+      <div className="mt-3 flex min-h-[132px] flex-col items-center justify-center gap-3">
         {occupiedBy ? (
           <>
             <PersonBadge name={occupiedBy.name} crowned={active} />
             <div>
-              <p className="text-[13px] uppercase tracking-[0.2em] text-white/55">
+              <p className="text-[12px] uppercase tracking-[0.2em] text-white/55">
                 {occupiedBy.role === 'spymaster' ? 'Mestre-Espiao' : 'Agente'}
               </p>
             </div>
           </>
         ) : (
           <>
-            <div className="flex h-24 w-24 items-center justify-center rounded-full border border-white/15 bg-white/8 text-3xl font-black text-white/85">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/15 bg-white/8 text-2xl font-black text-white/85">
               {getInitials(placeholder)}
             </div>
             <div>
-              <p className="text-3xl font-black uppercase tracking-[0.06em]">{placeholder}</p>
-              <p className="mt-1 text-xs uppercase tracking-[0.18em] text-white/45">
+              <p className="text-2xl font-black uppercase tracking-[0.06em]">{placeholder}</p>
+              <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-white/45">
                 Vaga disponivel
               </p>
             </div>
@@ -109,11 +178,11 @@ function RoleCard(props: RoleCardProps) {
         type="button"
         onClick={onClick}
         className={cn(
-          'mt-5 w-full rounded-full border border-[#97db56]/50 bg-gradient-to-b from-[#31c200] to-[#1b7f00] px-4 py-3 text-sm font-black uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] transition hover:brightness-110',
+          'mt-4 w-full rounded-full border border-[#97db56]/50 bg-gradient-to-b from-[#31c200] to-[#1b7f00] px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] transition hover:brightness-110',
           active && 'ring-2 ring-[#cbff94]/50'
         )}
       >
-        {active ? 'Selecionado' : occupiedBy ? 'Trocar para esta vaga' : 'Join Team'}
+        {active ? 'Selecionado' : occupiedBy ? 'Trocar' : 'Join Team'}
       </button>
     </div>
   )
@@ -138,10 +207,10 @@ function TeamSidebar({ team, players, me, remaining, onPickRole }: TeamSidebarPr
   const spymasterSpotlight = spymasters.find((player) => player.id === me?.id) ?? spymasters[0]
 
   return (
-    <aside className="flex w-full max-w-[260px] flex-col gap-4 xl:w-[260px]">
+    <aside className="flex w-full max-w-[235px] flex-col gap-3 xl:w-[235px]">
       <div
         className={cn(
-          'relative overflow-hidden rounded-[30px] border bg-gradient-to-b p-5 text-white',
+          'relative overflow-hidden rounded-[26px] border bg-gradient-to-b p-4 text-white',
           palette.panel,
           palette.border,
           palette.shadow
@@ -149,7 +218,7 @@ function TeamSidebar({ team, players, me, remaining, onPickRole }: TeamSidebarPr
       >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_34%)]" />
         <div className="relative">
-          <p className="text-center text-[12px] font-black uppercase tracking-[0.28em] text-white/70">
+          <p className="text-center text-[11px] font-black uppercase tracking-[0.28em] text-white/70">
             Agentes
           </p>
           <RoleCard
@@ -162,7 +231,7 @@ function TeamSidebar({ team, players, me, remaining, onPickRole }: TeamSidebarPr
         </div>
       </div>
 
-      <div className="relative overflow-hidden rounded-[24px] border border-white/10 bg-[#131c2d]">
+      <div className="relative overflow-hidden rounded-[20px] border border-white/10 bg-[#131c2d]">
         <div
           className={cn(
             'absolute inset-0 bg-gradient-to-br opacity-30',
@@ -171,14 +240,14 @@ function TeamSidebar({ team, players, me, remaining, onPickRole }: TeamSidebarPr
         />
         <div className="relative flex items-center justify-between px-4 py-3">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-white/45">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/45">
               Restantes
             </p>
-            <p className={cn('text-5xl font-black leading-none', palette.text)}>{remaining}</p>
+            <p className={cn('text-4xl font-black leading-none', palette.text)}>{remaining}</p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-right">
-            <p className="text-xs uppercase tracking-[0.22em] text-white/45">{teamLabel}</p>
-            <p className="text-sm font-bold text-white/80">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-white/45">{teamLabel}</p>
+            <p className="text-xs font-bold text-white/80">
               {players.length} jogador{players.length !== 1 ? 'es' : ''}
             </p>
           </div>
@@ -187,14 +256,14 @@ function TeamSidebar({ team, players, me, remaining, onPickRole }: TeamSidebarPr
 
       <div
         className={cn(
-          'relative overflow-hidden rounded-[30px] border bg-gradient-to-b p-5 text-white',
+          'relative overflow-hidden rounded-[26px] border bg-gradient-to-b p-4 text-white',
           palette.panel,
           palette.border
         )}
       >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.16),transparent_34%)]" />
         <div className="relative">
-          <p className="text-center text-[12px] font-black uppercase tracking-[0.24em] text-white/72">
+          <p className="text-center text-[11px] font-black uppercase tracking-[0.24em] text-white/72">
             Mestres-Espioes
           </p>
           <RoleCard
@@ -207,30 +276,28 @@ function TeamSidebar({ team, players, me, remaining, onPickRole }: TeamSidebarPr
         </div>
       </div>
 
-      <div className="rounded-[24px] border border-white/10 bg-[#151515]/35 p-4">
-        <p className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-white/55">Elenco</p>
+      <div className="rounded-[20px] border border-white/10 bg-[#151515]/35 p-3">
+        <p className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-white/55">Elenco</p>
         <div className="space-y-2">
           {players.map((player) => (
             <div
               key={player.id}
               className={cn(
-                'flex items-center gap-3 rounded-2xl border px-3 py-2 text-sm font-bold',
+                'flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-bold',
                 player.id === me?.id
                   ? `${palette.badge} border-transparent text-white`
                   : 'border-white/10 bg-white/5 text-white/75'
               )}
             >
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/20 text-xs font-black">
-                {getInitials(player.name)}
-              </span>
-              <span className="flex-1">{player.name}</span>
-              <span className="text-[10px] uppercase tracking-[0.16em] text-white/65">
+              <PersonBadge name={player.name} small />
+              <span className="flex-1 truncate">{player.name}</span>
+              <span className="text-[9px] uppercase tracking-[0.16em] text-white/65">
                 {player.role === 'spymaster' ? 'Espiao' : 'Agente'}
               </span>
             </div>
           ))}
           {players.length === 0 ? (
-            <p className="text-sm italic text-white/35">Nenhum jogador neste time ainda.</p>
+            <p className="text-xs italic text-white/35">Nenhum jogador neste time ainda.</p>
           ) : null}
         </div>
       </div>
@@ -241,11 +308,12 @@ function TeamSidebar({ team, players, me, remaining, onPickRole }: TeamSidebarPr
 type SettingsModalProps = {
   open: boolean
   me: Player | null
+  isAdmin: boolean
   onClose: () => void
   onPickRole: (team: PlayerTeam, role: PlayerRole) => void
 }
 
-function SettingsModal({ open, me, onClose, onPickRole }: SettingsModalProps) {
+function SettingsModal({ open, me, isAdmin, onClose, onPickRole }: SettingsModalProps) {
   if (!open) return null
 
   const isActive = (team: PlayerTeam, role: PlayerRole) => me?.team === team && me?.role === role
@@ -254,7 +322,16 @@ function SettingsModal({ open, me, onClose, onPickRole }: SettingsModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
       <div className="w-full max-w-[520px] rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,#3a3a3a_0%,#272727_100%)] p-5 shadow-[0_25px_80px_rgba(0,0,0,0.45)]">
         <div className="mb-4 flex items-center justify-between">
-          <div className="rounded-xl bg-[#444] px-4 py-2 text-sm font-black text-white">Jogador</div>
+          <div className="flex items-center gap-2">
+            <div className="rounded-xl bg-[#444] px-4 py-2 text-sm font-black text-white">
+              Jogador
+            </div>
+            {isAdmin ? (
+              <div className="rounded-xl bg-[#228b12] px-3 py-2 text-xs font-black uppercase text-white">
+                Admin
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -265,7 +342,7 @@ function SettingsModal({ open, me, onClose, onPickRole }: SettingsModalProps) {
         </div>
 
         <div className="mb-5 flex items-center gap-4 rounded-[22px] bg-white/5 p-4">
-          <PersonBadge name={me?.name || 'Jogador'} crowned />
+          <PersonBadge name={me?.name || 'Jogador'} crowned={isAdmin} />
           <div className="flex-1">
             <p className="text-sm font-black text-white/65">Apelido</p>
             <div className="mt-2 rounded-xl bg-white px-4 py-3 text-xl font-bold text-[#1b1b1b]">
@@ -344,6 +421,34 @@ function SettingsModal({ open, me, onClose, onPickRole }: SettingsModalProps) {
   )
 }
 
+function getCardClasses(team: GameState['cards'][number]['team'], visible: boolean) {
+  let outerClass = 'border-[#f4d4ac]/55 bg-[linear-gradient(180deg,#f7d9b2_0%,#ecc79a_100%)]'
+  let innerClass = 'border-[#d1aa77] bg-[linear-gradient(180deg,#f8dcba_0%,#f3d1a8_100%)]'
+  let labelClass = 'bg-[linear-gradient(180deg,#b78c60_0%,#9f774f_100%)] text-white'
+
+  if (visible) {
+    if (team === 'red') {
+      outerClass = 'border-[#ffb09d]/40 bg-[linear-gradient(180deg,#f18a79_0%,#df6d5d_100%)]'
+      innerClass = 'border-[#efb4ab]/20 bg-[linear-gradient(180deg,#ef7b68_0%,#e36959_100%)]'
+      labelClass = 'bg-[linear-gradient(180deg,#c84c39_0%,#b6402f_100%)] text-white'
+    } else if (team === 'blue') {
+      outerClass = 'border-[#9fd9ff]/40 bg-[linear-gradient(180deg,#73b8f6_0%,#5a9fe1_100%)]'
+      innerClass = 'border-[#bee4ff]/20 bg-[linear-gradient(180deg,#67aff0_0%,#4f97dd_100%)]'
+      labelClass = 'bg-[linear-gradient(180deg,#3f83c9_0%,#2d72b8_100%)] text-white'
+    } else if (team === 'neutral') {
+      outerClass = 'border-[#ecd1aa]/45 bg-[linear-gradient(180deg,#e2c79e_0%,#d6b58a_100%)]'
+      innerClass = 'border-[#f2dfc5]/20 bg-[linear-gradient(180deg,#dbc096_0%,#cfaf84_100%)]'
+      labelClass = 'bg-[linear-gradient(180deg,#b58d5e_0%,#9f794f_100%)] text-white'
+    } else {
+      outerClass = 'border-white/15 bg-[linear-gradient(180deg,#313131_0%,#1f1f1f_100%)]'
+      innerClass = 'border-white/10 bg-[linear-gradient(180deg,#242424_0%,#171717_100%)]'
+      labelClass = 'bg-[linear-gradient(180deg,#101010_0%,#0a0a0a_100%)] text-white'
+    }
+  }
+
+  return { outerClass, innerClass, labelClass }
+}
+
 export default function RoomPage() {
   const params = useParams()
   const roomId = params.id as string
@@ -357,8 +462,9 @@ export default function RoomPage() {
   const [copied, setCopied] = useState(false)
   const [phase, setPhase] = useState<'lobby' | 'game'>('lobby')
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [selectedSpyCards, setSelectedSpyCards] = useState<number[]>([])
   const [pendingRevealIndex, setPendingRevealIndex] = useState<number | null>(null)
+
+  const extendedState = asExtendedState(gameState)
 
   useEffect(() => {
     const stored = localStorage.getItem(`codenames_player_${roomId}`)
@@ -433,16 +539,44 @@ export default function RoomPage() {
   }, [roomId])
 
   useEffect(() => {
-    setSelectedSpyCards([])
     setPendingRevealIndex(null)
   }, [gameState?.currentTurn, gameState?.hint?.word, gameState?.phase])
 
+  const isAdmin = useMemo(() => {
+    return me?.id === (extendedState?.roomAdminId ?? players[0]?.id)
+  }, [extendedState?.roomAdminId, players, me?.id])
+
   const updateGameState = useCallback(
-    async (newState: GameState) => {
+    async (newState: ExtendedGameState) => {
       setGameState(newState)
       await supabase.from('rooms').update({ state: newState }).eq('id', roomId)
     },
     [roomId]
+  )
+
+  const updatePendingSelection = useCallback(
+    async (index: number | null) => {
+      if (!extendedState || !me) return
+
+      const pendingSelections = { ...(extendedState.pendingSelections || {}) }
+
+      if (index === null) {
+        delete pendingSelections[me.id]
+      } else {
+        pendingSelections[me.id] = {
+          index,
+          name: me.name,
+          team: me.team,
+        }
+      }
+
+      await updateGameState({
+        ...extendedState,
+        pendingSelections,
+        roomAdminId: extendedState.roomAdminId ?? players[0]?.id,
+      })
+    },
+    [extendedState, me, players, updateGameState]
   )
 
   const handleSetTeamRole = async (team: PlayerTeam, role: PlayerRole) => {
@@ -453,62 +587,115 @@ export default function RoomPage() {
   }
 
   const handleStartGame = async () => {
-    if (!gameState) return
-    const newState = { ...gameState, phase: 'playing' as const }
+    if (!extendedState) return
+    const newState: ExtendedGameState = {
+      ...extendedState,
+      phase: 'playing',
+      roomAdminId: extendedState.roomAdminId ?? players[0]?.id,
+    }
     await updateGameState(newState)
     setPhase('game')
   }
 
   const handleRematch = async () => {
-    if (!gameState) return
-    const themes = getThemesFromState(gameState)
-    const nextState = createInitialState(themes, [])
+    if (!extendedState) return
+    const themes = getThemesFromState(extendedState)
+    const nextState = createInitialState(themes, []) as ExtendedGameState
+    nextState.roomAdminId = extendedState.roomAdminId ?? players[0]?.id
+    nextState.pendingSelections = {}
+    nextState.detailedHintHistory = []
     await updateGameState(nextState)
     setPhase(nextState.phase === 'lobby' ? 'lobby' : 'game')
-    setSelectedSpyCards([])
     setPendingRevealIndex(null)
   }
 
   const handleCardClick = async (index: number) => {
-    if (!gameState || !me) return
+    if (!extendedState || !me) return
 
     if (me.role === 'spymaster') {
-      setSelectedSpyCards((current) =>
-        current.includes(index) ? current.filter((value) => value !== index) : [...current, index]
-      )
+      const activeSelections = extendedState.pendingSelections || {}
+      const alreadySelected = activeSelections[me.id]?.index === index
+      await updatePendingSelection(alreadySelected ? null : index)
       return
     }
 
-    if (me.team !== gameState.currentTurn) return
-    if (!gameState.hint) return
-    if (gameState.cards[index]?.revealed) return
+    if (me.team !== extendedState.currentTurn) return
+    if (!extendedState.hint) return
+    if (extendedState.cards[index]?.revealed) return
+
     setPendingRevealIndex(index)
+    await updatePendingSelection(index)
   }
 
   const handleConfirmReveal = async () => {
-    if (!gameState || pendingRevealIndex === null) return
-    await updateGameState(revealCard(gameState, pendingRevealIndex))
-    setPendingRevealIndex(null)
-  }
+    if (!extendedState || pendingRevealIndex === null || !me) return
 
-  const handleCancelReveal = () => {
+    const nextState = revealCard(extendedState, pendingRevealIndex) as ExtendedGameState
+    const pendingSelections = { ...(extendedState.pendingSelections || {}) }
+    delete pendingSelections[me.id]
+
+    const lastHistory = [...(extendedState.detailedHintHistory || [])]
+    if (lastHistory.length > 0) {
+      const targetWord = extendedState.cards[pendingRevealIndex]?.word
+      const lastEntry = lastHistory[lastHistory.length - 1]
+      if (targetWord && !lastEntry.picks.includes(targetWord)) {
+        lastHistory[lastHistory.length - 1] = {
+          ...lastEntry,
+          picks: [...lastEntry.picks, targetWord],
+        }
+      }
+    }
+
+    await updateGameState({
+      ...nextState,
+      roomAdminId: extendedState.roomAdminId ?? players[0]?.id,
+      pendingSelections,
+      detailedHintHistory: lastHistory,
+    })
     setPendingRevealIndex(null)
   }
 
   const handleHintSubmit = async () => {
-    if (!gameState || !me || !hintWord.trim()) return
-    if (me.role !== 'spymaster' || me.team !== gameState.currentTurn || gameState.hint) return
-    await updateGameState(applyHint(gameState, hintWord.trim(), hintCount))
+    if (!extendedState || !me || !hintWord.trim()) return
+    if (me.role !== 'spymaster' || me.team !== extendedState.currentTurn || extendedState.hint) return
+
+    const nextState = applyHint(extendedState, hintWord.trim(), hintCount) as ExtendedGameState
+
+    await updateGameState({
+      ...nextState,
+      roomAdminId: extendedState.roomAdminId ?? players[0]?.id,
+      pendingSelections: {},
+      detailedHintHistory: [
+        ...(extendedState.detailedHintHistory || []),
+        {
+          word: hintWord.trim(),
+          count: hintCount,
+          team: me.team,
+          picks: [],
+        },
+      ],
+    })
+
     setHintWord('')
     setHintCount(1)
-    setSelectedSpyCards([])
+    setPendingRevealIndex(null)
   }
 
   const handlePassTurn = async () => {
-    if (!gameState || !me) return
-    if (me.team !== gameState.currentTurn) return
-    await updateGameState(passTurn(gameState))
-    setSelectedSpyCards([])
+    if (!extendedState || !me) return
+    if (me.team !== extendedState.currentTurn) return
+
+    const nextState = passTurn(extendedState) as ExtendedGameState
+    const pendingSelections = { ...(extendedState.pendingSelections || {}) }
+    delete pendingSelections[me.id]
+
+    await updateGameState({
+      ...nextState,
+      roomAdminId: extendedState.roomAdminId ?? players[0]?.id,
+      pendingSelections,
+      detailedHintHistory: extendedState.detailedHintHistory || [],
+    })
+
     setPendingRevealIndex(null)
   }
 
@@ -532,7 +719,7 @@ export default function RoomPage() {
     )
   }
 
-  if (!gameState) {
+  if (!extendedState) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#07111d] text-white">
         <div className="rounded-[28px] border border-[#d85b49]/30 bg-[#1b1720] px-8 py-7 text-center shadow-2xl">
@@ -546,79 +733,80 @@ export default function RoomPage() {
   const redPlayers = players.filter((player) => player.team === 'red')
   const bluePlayers = players.filter((player) => player.team === 'blue')
   const spectators = players.filter((player) => player.team === 'spectator')
-  const isMyTurn = me?.team === gameState.currentTurn
+  const isMyTurn = me?.team === extendedState.currentTurn
   const isSpymaster = me?.role === 'spymaster'
-  const canReveal = isMyTurn && !isSpymaster && !!gameState.hint && gameState.phase === 'playing'
-  const canGiveHint = isMyTurn && isSpymaster && !gameState.hint && gameState.phase === 'playing'
+  const canReveal = isMyTurn && !isSpymaster && !!extendedState.hint && extendedState.phase === 'playing'
+  const canGiveHint = isMyTurn && isSpymaster && !extendedState.hint && extendedState.phase === 'playing'
+  const pendingSelections = Object.entries(extendedState.pendingSelections || {})
 
   if (phase === 'lobby') {
     return (
-      <div className="min-h-screen bg-[linear-gradient(180deg,#05070d_0%,#101a29_16%,#1f344b_58%,#24415b_100%)] text-white">
+      <div className="h-screen overflow-hidden bg-[linear-gradient(180deg,#05070d_0%,#101a29_16%,#1f344b_58%,#24415b_100%)] text-white">
         <SettingsModal
           open={settingsOpen}
           me={me}
+          isAdmin={!!isAdmin}
           onClose={() => setSettingsOpen(false)}
           onPickRole={handleSetTeamRole}
         />
 
-        <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col px-5 py-5">
-          <header className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-[30px] border border-white/10 bg-black/22 px-5 py-4 backdrop-blur-md">
+        <div className="mx-auto flex h-screen w-full max-w-[1600px] flex-col px-4 py-3">
+          <header className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-md">
             <div className="flex items-center gap-3">
               <div className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-black">
                 {me?.name || 'Jogador'}
               </div>
-              <div className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm text-white/65">
-                {players.length} participante{players.length !== 1 ? 's' : ''}
-              </div>
+              {isAdmin ? (
+                <div className="rounded-full bg-[#238b16] px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-white">
+                  Admin
+                </div>
+              ) : null}
             </div>
 
             <div className="text-center">
-              <p className="text-sm uppercase tracking-[0.24em] text-white/45">Sala</p>
-              <h1 className="text-3xl font-black uppercase tracking-[0.08em]">{roomId}</h1>
+              <p className="text-xs uppercase tracking-[0.24em] text-white/45">Sala</p>
+              <h1 className="text-2xl font-black uppercase tracking-[0.08em]">{roomId}</h1>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setSettingsOpen(true)}
-                className="rounded-full border border-white/20 bg-white/5 px-5 py-3 text-sm font-black uppercase tracking-[0.14em] transition hover:border-white/40 hover:bg-white/10"
+                className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] transition hover:border-white/40 hover:bg-white/10"
               >
                 Configuracoes
               </button>
               <button
                 onClick={copyCode}
-                className="rounded-full border border-white/20 bg-white/5 px-5 py-3 text-sm font-black uppercase tracking-[0.14em] transition hover:border-white/40 hover:bg-white/10"
+                className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] transition hover:border-white/40 hover:bg-white/10"
               >
                 {copied ? 'Codigo copiado' : 'Copiar codigo'}
               </button>
               <button
                 onClick={handleStartGame}
-                className="rounded-full border border-[#8cd45c]/45 bg-gradient-to-b from-[#35c000] to-[#247d00] px-6 py-3 text-sm font-black uppercase tracking-[0.18em] text-white shadow-[0_12px_30px_rgba(37,125,0,0.35)] transition hover:brightness-110"
+                className="rounded-full border border-[#8cd45c]/45 bg-gradient-to-b from-[#35c000] to-[#247d00] px-5 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white shadow-[0_12px_30px_rgba(37,125,0,0.35)] transition hover:brightness-110"
               >
                 Iniciar jogo
               </button>
             </div>
           </header>
 
-          <div className="mb-6 rounded-[28px] border border-white/10 bg-black/18 px-6 py-4 text-center backdrop-blur-md">
-            <p className="text-sm uppercase tracking-[0.34em] text-white/45">Status da sala</p>
-            <h2 className="mt-2 text-3xl font-black uppercase tracking-[0.02em]">
+          <div className="mb-3 rounded-[24px] border border-white/10 bg-black/18 px-6 py-3 text-center backdrop-blur-md">
+            <p className="text-xs uppercase tracking-[0.34em] text-white/45">Status da sala</p>
+            <h2 className="mt-1 text-2xl font-black uppercase tracking-[0.02em]">
               O time azul precisa de um mestre-espiao
             </h2>
-            <p className="mt-2 text-white/60">
-              Escolha seu lado, defina se vai jogar como agente ou mestre-espiao e comece a partida.
-            </p>
           </div>
 
           {spectators.length > 0 ? (
-            <div className="mb-6 flex flex-wrap items-center justify-center gap-2">
-              <span className="text-xs font-black uppercase tracking-[0.24em] text-white/40">
+            <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
+              <span className="text-[11px] font-black uppercase tracking-[0.24em] text-white/40">
                 Espectadores
               </span>
               {spectators.map((player) => (
                 <span
                   key={player.id}
                   className={cn(
-                    'rounded-full border px-3 py-1.5 text-sm font-bold',
+                    'rounded-full border px-3 py-1 text-xs font-bold',
                     player.id === me?.id
                       ? 'border-white/30 bg-white/12 text-white'
                       : 'border-white/10 bg-black/18 text-white/65'
@@ -630,56 +818,43 @@ export default function RoomPage() {
             </div>
           ) : null}
 
-          <div className="grid flex-1 gap-5 xl:grid-cols-[260px_minmax(0,1fr)_260px]">
+          <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[235px_minmax(0,1fr)_235px]">
             <TeamSidebar
               team="blue"
               players={bluePlayers}
               me={me}
-              remaining={gameState.blueLeft}
+              remaining={extendedState.blueLeft}
               onPickRole={handleSetTeamRole}
             />
 
-            <main className="flex min-h-[660px] flex-col items-center justify-center rounded-[36px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,20,32,0.88),rgba(30,53,77,0.65))] p-6 shadow-2xl backdrop-blur-md">
-              <div className="mb-4 grid w-full max-w-[1060px] grid-cols-5 gap-5">
-                {gameState.cards.map((card, index) => (
-                  <div
-                    key={`${card.word}-${index}`}
-                    className="rounded-[22px] border border-[#efcfab]/70 bg-[linear-gradient(180deg,#f7d6ad_0%,#efc89b_100%)] p-2.5 shadow-[0_16px_26px_rgba(0,0,0,0.16)]"
-                  >
-                    <div className="rounded-[18px] border border-[#caa06e] bg-[linear-gradient(180deg,#f9dcba_0%,#f4cfa7_100%)] p-2">
-                      <div className="rounded-[16px] border border-white/20 bg-[linear-gradient(180deg,rgba(255,255,255,0.2),rgba(255,255,255,0.05))] px-3 py-6">
-                        <div className="rounded-[14px] bg-[linear-gradient(180deg,#ba8f63_0%,#a77d54_100%)] px-2 py-4 text-center text-[clamp(1rem,1.3vw,1.15rem)] font-black uppercase tracking-[0.04em] text-white">
-                          {card.word}
+            <main className="flex min-h-0 flex-col items-center justify-center rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,20,32,0.88),rgba(30,53,77,0.65))] p-4 shadow-2xl backdrop-blur-md">
+              <div className="grid w-full max-w-[980px] grid-cols-5 gap-3">
+                {extendedState.cards.map((card, index) => {
+                  const { outerClass, innerClass, labelClass } = getCardClasses(card.team, false)
+
+                  return (
+                    <div
+                      key={`${card.word}-${index}`}
+                      className={cn(
+                        'aspect-[1.12/0.84] rounded-[20px] border p-2 shadow-[0_16px_26px_rgba(0,0,0,0.16)]',
+                        outerClass
+                      )}
+                    >
+                      <div className={cn('h-full rounded-[16px] border p-2', innerClass)}>
+                        <div className="flex h-full rounded-[14px] border border-white/20 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.05))] p-2">
+                          <div
+                            className={cn(
+                              'flex w-full items-center justify-center rounded-[12px] px-2 text-center text-[clamp(0.82rem,1.05vw,1.05rem)] font-black uppercase tracking-[0.03em] leading-tight break-words',
+                              labelClass
+                            )}
+                          >
+                            {card.word}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <div className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-white/65">
-                  Tema:{' '}
-                  <span className="font-bold text-white">
-                    {Array.isArray(gameState.theme)
-                      ? gameState.theme.join(', ')
-                      : gameState.theme || 'Padrao'}
-                  </span>
-                </div>
-                <div className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-white/65">
-                  25 cartas
-                </div>
-                <button
-                  onClick={() => handleSetTeamRole('spectator', 'operative')}
-                  className={cn(
-                    'rounded-full border px-4 py-2 text-sm font-bold transition',
-                    me?.team === 'spectator'
-                      ? 'border-white/30 bg-white/12 text-white'
-                      : 'border-white/15 bg-white/5 text-white/65 hover:bg-white/10'
-                  )}
-                >
-                  Assistir como espectador
-                </button>
+                  )
+                })}
               </div>
             </main>
 
@@ -687,7 +862,7 @@ export default function RoomPage() {
               team="red"
               players={redPlayers}
               me={me}
-              remaining={gameState.redLeft}
+              remaining={extendedState.redLeft}
               onPickRole={handleSetTeamRole}
             />
           </div>
@@ -697,65 +872,71 @@ export default function RoomPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#05070d_0%,#101a29_16%,#1f344b_58%,#2a4967_100%)] text-white">
+    <div className="h-screen overflow-hidden bg-[linear-gradient(180deg,#05070d_0%,#101a29_16%,#1f344b_58%,#2a4967_100%)] text-white">
       <SettingsModal
         open={settingsOpen}
         me={me}
+        isAdmin={!!isAdmin}
         onClose={() => setSettingsOpen(false)}
         onPickRole={handleSetTeamRole}
       />
 
-      <div className="mx-auto flex min-h-screen w-full max-w-[1720px] flex-col px-5 py-4">
-        <header className="mb-4 flex flex-wrap items-center justify-between gap-4 rounded-[30px] border border-white/10 bg-black/22 px-5 py-4 backdrop-blur-md">
-          <div className="flex items-center gap-3">
-            <div className="text-2xl font-black uppercase tracking-[0.08em]">
+      <div className="mx-auto flex h-screen w-full max-w-[1720px] flex-col px-4 py-3">
+        <header className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-md">
+          <div className="flex items-center gap-2">
+            <div className="text-xl font-black uppercase tracking-[0.08em]">
               <span className="text-white">Code</span>
               <span className="text-[#ff6d5a]">Names</span>
             </div>
+            {isAdmin ? (
+              <div className="rounded-full bg-[#238b16] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white">
+                Admin
+              </div>
+            ) : null}
             <button
               onClick={copyCode}
-              className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white/70 transition hover:bg-white/10"
+              className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-white/70 transition hover:bg-white/10"
             >
               {copied ? 'Copiado' : `Sala ${roomId}`}
             </button>
             <button
               onClick={() => setSettingsOpen(true)}
-              className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white/70 transition hover:bg-white/10"
+              className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-white/70 transition hover:bg-white/10"
             >
               Configuracoes
             </button>
           </div>
 
-          {gameState.phase === 'finished' ? (
+          {extendedState.phase === 'finished' ? (
             <div
               className={cn(
                 'rounded-full px-7 py-3 text-sm font-black uppercase tracking-[0.2em] text-white shadow-lg',
-                gameState.winner === 'red' ? 'bg-[#d85b49]' : 'bg-[#3f8ed8]'
+                extendedState.winner === 'red' ? 'bg-[#d85b49]' : 'bg-[#3f8ed8]'
               )}
             >
-              {gameState.winner === 'red' ? 'Vitoria do vermelho' : 'Vitoria do azul'}
+              {extendedState.winner === 'red' ? 'Vitoria do vermelho' : 'Vitoria do azul'}
             </div>
           ) : (
             <div
               className={cn(
                 'rounded-full px-7 py-3 text-sm font-black uppercase tracking-[0.2em] text-white shadow-lg',
-                gameState.currentTurn === 'red' ? 'bg-[#d85b49]' : 'bg-[#3f8ed8]'
+                extendedState.currentTurn === 'red' ? 'bg-[#d85b49]' : 'bg-[#3f8ed8]'
               )}
             >
-              {gameState.currentTurn === 'red' ? 'Vez do vermelho' : 'Vez do azul'}
+              {extendedState.currentTurn === 'red' ? 'Vez do vermelho' : 'Vez do azul'}
             </div>
           )}
 
-          <div className="flex items-center gap-3">
-            <div className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm">
-              <span className="mr-2 font-black text-[#ff8b7d]">{gameState.redLeft}</span>
+          <div className="flex items-center gap-2">
+            <div className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs">
+              <span className="mr-2 font-black text-[#ff8b7d]">{extendedState.redLeft}</span>
               <span className="text-white/45">restantes</span>
-              <span className="mx-3 font-black text-[#78bfff]">{gameState.blueLeft}</span>
+              <span className="mx-3 font-black text-[#78bfff]">{extendedState.blueLeft}</span>
             </div>
-            {gameState.phase === 'finished' ? (
+            {extendedState.phase === 'finished' && isAdmin ? (
               <button
                 onClick={handleRematch}
-                className="rounded-full border border-[#8cd45c]/45 bg-gradient-to-b from-[#35c000] to-[#247d00] px-5 py-3 text-xs font-black uppercase tracking-[0.16em] text-white shadow-[0_12px_30px_rgba(37,125,0,0.35)] transition hover:brightness-110"
+                className="rounded-full border border-[#8cd45c]/45 bg-gradient-to-b from-[#35c000] to-[#247d00] px-5 py-2.5 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-[0_12px_30px_rgba(37,125,0,0.35)] transition hover:brightness-110"
               >
                 Recriar sala
               </button>
@@ -763,43 +944,46 @@ export default function RoomPage() {
           </div>
         </header>
 
-        <div className="grid flex-1 gap-5 xl:grid-cols-[260px_minmax(0,1fr)_260px]">
+        <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[235px_minmax(0,1fr)_235px]">
           <TeamSidebar
             team="red"
             players={redPlayers}
             me={me}
-            remaining={gameState.redLeft}
+            remaining={extendedState.redLeft}
             onPickRole={handleSetTeamRole}
           />
 
-          <main className="rounded-[36px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,20,32,0.84),rgba(42,73,103,0.72))] p-6 shadow-2xl backdrop-blur-md">
-            <div className="mb-6 text-center">
-              {gameState.hint ? (
+          <main className="flex min-h-0 flex-col rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,20,32,0.84),rgba(42,73,103,0.72))] p-4 shadow-2xl backdrop-blur-md">
+            <div className="mb-4 text-center">
+              {extendedState.hint ? (
                 <div
                   className={cn(
-                    'mx-auto inline-flex flex-wrap items-center justify-center gap-4 rounded-full border px-5 py-3',
-                    gameState.hint.team === 'red'
+                    'mx-auto inline-flex flex-wrap items-center justify-center gap-4 rounded-full border px-5 py-2.5',
+                    extendedState.hint.team === 'red'
                       ? 'border-[#d85b49]/40 bg-[#d85b49]/12'
                       : 'border-[#3f8ed8]/40 bg-[#3f8ed8]/12'
                   )}
                 >
-                  <span className="text-sm uppercase tracking-[0.26em] text-white/45">Dica</span>
-                  <span className="text-3xl font-black uppercase">{gameState.hint.word}</span>
+                  <span className="text-xs uppercase tracking-[0.26em] text-white/45">Dica</span>
+                  <span className="text-3xl font-black uppercase">{extendedState.hint.word}</span>
                   <span
                     className={cn(
                       'rounded-full px-4 py-2 text-xl font-black',
-                      gameState.hint.team === 'red' ? 'bg-[#d85b49] text-white' : 'bg-[#3f8ed8] text-white'
+                      extendedState.hint.team === 'red'
+                        ? 'bg-[#d85b49] text-white'
+                        : 'bg-[#3f8ed8] text-white'
                     )}
                   >
-                    {gameState.hint.count}
+                    {extendedState.hint.count}
                   </span>
-                  <span className="text-sm text-white/60">
-                    {gameState.hint.guessesLeft} tentativa{gameState.hint.guessesLeft !== 1 ? 's' : ''}
+                  <span className="text-xs text-white/60">
+                    {extendedState.hint.guessesLeft} tentativa
+                    {extendedState.hint.guessesLeft !== 1 ? 's' : ''}
                   </span>
                   {isMyTurn && !isSpymaster ? (
                     <button
                       onClick={handlePassTurn}
-                      className="rounded-full border border-white/15 bg-white/8 px-4 py-2 text-sm font-black uppercase tracking-[0.14em] transition hover:bg-white/12"
+                      className="rounded-full border border-white/15 bg-white/8 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] transition hover:bg-white/12"
                     >
                       Passar
                     </button>
@@ -837,146 +1021,109 @@ export default function RoomPage() {
                   </button>
                 </div>
               ) : (
-                <div className="rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm uppercase tracking-[0.2em] text-white/35">
-                  {gameState.phase === 'playing'
+                <div className="rounded-full border border-white/10 bg-white/5 px-5 py-3 text-xs uppercase tracking-[0.2em] text-white/35">
+                  {extendedState.phase === 'playing'
                     ? isSpymaster
-                      ? 'Clique nas cartas para marcar sua leitura em verde'
+                      ? 'Clique nas cartas para marcar sua leitura'
                       : 'Aguardando a dica do mestre-espiao'
                     : 'Partida pausada'}
                 </div>
               )}
             </div>
 
-            <div className="mx-auto grid w-full max-w-[1080px] grid-cols-5 gap-4">
-              {gameState.cards.map((card, index) => {
-                let outerClass =
-                  'border-[#f4d4ac]/55 bg-[linear-gradient(180deg,#f7d9b2_0%,#ecc79a_100%)]'
-                let innerClass =
-                  'border-[#d1aa77] bg-[linear-gradient(180deg,#f8dcba_0%,#f3d1a8_100%)]'
-                let labelClass =
-                  'bg-[linear-gradient(180deg,#b78c60_0%,#9f774f_100%)] text-white'
+            <div className="grid min-h-0 flex-1 place-items-center">
+              <div className="grid w-full max-w-[1020px] grid-cols-5 gap-3">
+                {extendedState.cards.map((card, index) => {
+                  const visible = card.revealed || isSpymaster
+                  const { outerClass, innerClass, labelClass } = getCardClasses(card.team, visible)
+                  const cardSelections = pendingSelections.filter(
+                    ([, selection]) => selection.index === index
+                  )
+                  const pendingReveal = pendingRevealIndex === index
 
-                if (card.revealed || isSpymaster) {
-                  if (card.team === 'red') {
-                    outerClass =
-                      'border-[#ffb09d]/40 bg-[linear-gradient(180deg,#f18a79_0%,#df6d5d_100%)]'
-                    innerClass =
-                      'border-[#efb4ab]/20 bg-[linear-gradient(180deg,#ef7b68_0%,#e36959_100%)]'
-                    labelClass =
-                      'bg-[linear-gradient(180deg,#c84c39_0%,#b6402f_100%)] text-white'
-                  } else if (card.team === 'blue') {
-                    outerClass =
-                      'border-[#9fd9ff]/40 bg-[linear-gradient(180deg,#73b8f6_0%,#5a9fe1_100%)]'
-                    innerClass =
-                      'border-[#bee4ff]/20 bg-[linear-gradient(180deg,#67aff0_0%,#4f97dd_100%)]'
-                    labelClass =
-                      'bg-[linear-gradient(180deg,#3f83c9_0%,#2d72b8_100%)] text-white'
-                  } else if (card.team === 'neutral') {
-                    outerClass =
-                      'border-[#ecd1aa]/45 bg-[linear-gradient(180deg,#e2c79e_0%,#d6b58a_100%)]'
-                    innerClass =
-                      'border-[#f2dfc5]/20 bg-[linear-gradient(180deg,#dbc096_0%,#cfaf84_100%)]'
-                    labelClass =
-                      'bg-[linear-gradient(180deg,#b58d5e_0%,#9f794f_100%)] text-white'
-                  } else {
-                    outerClass =
-                      'border-white/15 bg-[linear-gradient(180deg,#313131_0%,#1f1f1f_100%)]'
-                    innerClass =
-                      'border-white/10 bg-[linear-gradient(180deg,#242424_0%,#171717_100%)]'
-                    labelClass =
-                      'bg-[linear-gradient(180deg,#101010_0%,#0a0a0a_100%)] text-white'
-                  }
-                }
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => handleCardClick(index)}
+                      disabled={me?.role !== 'spymaster' && (!canReveal || card.revealed)}
+                      className={cn(
+                        'group relative aspect-[1.14/0.82] rounded-[20px] border p-2 text-left shadow-[0_14px_24px_rgba(0,0,0,0.2)] transition duration-150',
+                        outerClass,
+                        !card.revealed &&
+                          (canReveal || isSpymaster) &&
+                          'hover:-translate-y-0.5 hover:shadow-[0_18px_28px_rgba(0,0,0,0.26)]',
+                        pendingReveal && 'ring-4 ring-white ring-offset-2 ring-offset-[#243d56]'
+                      )}
+                    >
+                      {cardSelections.length > 0 ? (
+                        <div className="absolute left-2 top-2 z-10 flex -space-x-2">
+                          {cardSelections.slice(0, 3).map(([playerId, selection]) => (
+                            <div
+                              key={playerId}
+                              className={cn(
+                                'rounded-full border-2 border-white/80',
+                                selection.team === 'red'
+                                  ? 'bg-[#d85b49]'
+                                  : selection.team === 'blue'
+                                    ? 'bg-[#3f8ed8]'
+                                    : 'bg-[#8b8b8b]'
+                              )}
+                            >
+                              <PersonBadge name={selection.name} small />
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
 
-                const spySelected = selectedSpyCards.includes(index)
-                const pendingReveal = pendingRevealIndex === index
-
-                return (
-                  <button
-                    key={index}
-                    onClick={() => handleCardClick(index)}
-                    disabled={me?.role !== 'spymaster' && (!canReveal || card.revealed)}
-                    className={cn(
-                      'group relative rounded-[22px] border p-2.5 text-left shadow-[0_16px_28px_rgba(0,0,0,0.22)] transition duration-150',
-                      outerClass,
-                      !card.revealed &&
-                        (canReveal || isSpymaster) &&
-                        'hover:-translate-y-1 hover:shadow-[0_20px_34px_rgba(0,0,0,0.28)]',
-                      spySelected && 'ring-4 ring-[#8dff61] ring-offset-2 ring-offset-[#243d56]',
-                      pendingReveal && 'scale-[1.02] ring-4 ring-white ring-offset-2 ring-offset-[#243d56]'
-                    )}
-                  >
-                    {me?.role === 'operative' && pendingReveal ? (
-                      <div className="absolute left-1/2 top-2 z-10 -translate-x-1/2 rounded-full bg-[#0d1017] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-lg">
-                        Clique para confirmar
-                      </div>
-                    ) : null}
-
-                    {me?.role === 'operative' && pendingReveal ? (
-                      <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+                      {me?.role === 'operative' && pendingReveal ? (
                         <button
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation()
                             handleConfirmReveal()
                           }}
-                          className="flex h-11 w-11 items-center justify-center rounded-full border border-[#baff8c]/50 bg-[#45bb18] text-xl text-white shadow-[0_8px_18px_rgba(69,187,24,0.35)] transition hover:brightness-110"
+                          className="absolute right-2 top-2 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-[#baff8c]/50 bg-[#45bb18] text-xl text-white shadow-[0_8px_18px_rgba(69,187,24,0.35)] transition hover:brightness-110"
                           aria-label="Confirmar carta"
                         >
                           ☝
                         </button>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            handleCancelReveal()
-                          }}
-                          className="rounded-full border border-white/20 bg-[#111722] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white/80 transition hover:bg-white/10"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    ) : null}
+                      ) : null}
 
-                    <div className={cn('rounded-[18px] border p-2.5', innerClass)}>
-                      <div className="rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.03))] px-3 py-4">
-                        <div
-                          className={cn(
-                            'rounded-[12px] px-3 py-4 text-center text-[clamp(1rem,1.15vw,1.3rem)] font-black uppercase tracking-[0.04em]',
-                            labelClass
-                          )}
-                        >
-                          {card.word}
+                      <div className={cn('flex h-full rounded-[16px] border p-2', innerClass)}>
+                        <div className="flex h-full w-full rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.03))] p-2">
+                          <div
+                            className={cn(
+                              'flex w-full items-center justify-center rounded-[12px] px-2 text-center text-[clamp(0.82rem,1vw,1.14rem)] font-black uppercase tracking-[0.03em] leading-tight break-words',
+                              labelClass
+                            )}
+                          >
+                            {card.word}
+                          </div>
                         </div>
                       </div>
-                    </div>
-
-                    {spySelected ? (
-                      <div className="absolute right-3 top-3 rounded-full bg-[#3ea900] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-lg">
-                        Selecionada
-                      </div>
-                    ) : null}
-                  </button>
-                )
-              })}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
-            {gameState.hintHistory.length > 0 ? (
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                <span className="text-xs font-black uppercase tracking-[0.22em] text-white/35">
+            {(extendedState.detailedHintHistory || []).length > 0 ? (
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">
                   Historico
                 </span>
-                {gameState.hintHistory.slice(0, 6).map((hint, index) => (
+                {(extendedState.detailedHintHistory || []).slice(-4).map((hint, index) => (
                   <span
-                    key={index}
+                    key={`${hint.word}-${index}`}
                     className={cn(
-                      'rounded-full px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em]',
+                      'rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em]',
                       hint.team === 'red'
                         ? 'bg-[#d85b49]/15 text-[#ff9d90]'
                         : 'bg-[#3f8ed8]/15 text-[#8dccff]'
                     )}
                   >
                     {hint.word} x{hint.count}
+                    {hint.picks.length > 0 ? ` • ${hint.picks.join(', ')}` : ''}
                   </span>
                 ))}
               </div>
@@ -987,7 +1134,7 @@ export default function RoomPage() {
             team="blue"
             players={bluePlayers}
             me={me}
-            remaining={gameState.blueLeft}
+            remaining={extendedState.blueLeft}
             onPickRole={handleSetTeamRole}
           />
         </div>
