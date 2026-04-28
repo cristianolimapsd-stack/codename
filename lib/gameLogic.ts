@@ -310,10 +310,7 @@ function randomStartingTeam(): 'red' | 'blue' {
   return Math.random() < 0.5 ? 'red' : 'blue'
 }
 
-export function createInitialState(
-  selectedThemes: string[],
-  customWords: string[] = []
-): GameState {
+export function createInitialState(selectedThemes: string[], customWords: string[] = []): GameState {
   const themeWords = selectedThemes.flatMap((theme) => THEME_WORDS[theme] ?? [])
   const wordsPool = [...themeWords, ...customWords]
     .map((word) => word.trim())
