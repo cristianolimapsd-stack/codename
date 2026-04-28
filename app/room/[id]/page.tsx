@@ -63,7 +63,12 @@ function getAvatarTheme(seed: string) {
 
 function getThemesFromState(gameState: GameState) {
   if (Array.isArray(gameState.theme)) return gameState.theme
-  if (typeof gameState.theme === 'string' && gameState.theme.trim()) return [gameState.theme]
+  if (typeof gameState.theme === 'string' && gameState.theme.trim()) {
+    return gameState.theme
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
   return ['geral']
 }
 
@@ -141,12 +146,12 @@ type RoleCardProps = {
 
 function RoleCard({ title, placeholder, occupiedBy, active, onClick }: RoleCardProps) {
   return (
-    <div className="mt-3 rounded-[22px] border border-white/15 bg-black/12 px-4 py-4 text-center">
+    <div className="mt-3 rounded-[20px] border border-white/15 bg-black/12 px-4 py-4 text-center">
       <p className="text-center text-[11px] font-black uppercase tracking-[0.22em] text-white/60">
         {title}
       </p>
 
-      <div className="mt-3 flex min-h-[132px] flex-col items-center justify-center gap-3">
+      <div className="mt-3 flex min-h-[126px] flex-col items-center justify-center gap-3">
         {occupiedBy ? (
           <>
             <PersonBadge name={occupiedBy.name} crowned={active} />
@@ -202,10 +207,10 @@ function TeamSidebar({ team, players, me, remaining, onPickRole }: TeamSidebarPr
   const spymasterSpotlight = spymasters.find((player) => player.id === me?.id) ?? spymasters[0]
 
   return (
-    <aside className="flex w-full max-w-[235px] flex-col gap-3 xl:w-[235px]">
+    <aside className="flex w-full flex-col gap-3 xl:max-w-[230px]">
       <div
         className={cn(
-          'relative overflow-hidden rounded-[26px] border bg-gradient-to-b p-4 text-white',
+          'relative overflow-hidden rounded-[24px] border bg-gradient-to-b p-4 text-white',
           palette.panel,
           palette.border,
           palette.shadow
@@ -226,7 +231,7 @@ function TeamSidebar({ team, players, me, remaining, onPickRole }: TeamSidebarPr
         </div>
       </div>
 
-      <div className="relative overflow-hidden rounded-[20px] border border-white/10 bg-[#131c2d]">
+      <div className="relative overflow-hidden rounded-[18px] border border-white/10 bg-[#131c2d]">
         <div
           className={cn(
             'absolute inset-0 bg-gradient-to-br opacity-30',
@@ -251,7 +256,7 @@ function TeamSidebar({ team, players, me, remaining, onPickRole }: TeamSidebarPr
 
       <div
         className={cn(
-          'relative overflow-hidden rounded-[26px] border bg-gradient-to-b p-4 text-white',
+          'relative overflow-hidden rounded-[24px] border bg-gradient-to-b p-4 text-white',
           palette.panel,
           palette.border
         )}
@@ -271,7 +276,7 @@ function TeamSidebar({ team, players, me, remaining, onPickRole }: TeamSidebarPr
         </div>
       </div>
 
-      <div className="rounded-[20px] border border-white/10 bg-[#151515]/35 p-3">
+      <div className="rounded-[18px] border border-white/10 bg-[#151515]/35 p-3">
         <p className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-white/55">Elenco</p>
         <div className="space-y-2">
           {players.map((player) => (
@@ -314,13 +319,11 @@ function SettingsModal({ open, me, isAdmin, onClose, onPickRole }: SettingsModal
   const isActive = (team: PlayerTeam, role: PlayerRole) => me?.team === team && me?.role === role
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-[520px] rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,#3a3a3a_0%,#272727_100%)] p-5 shadow-[0_25px_80px_rgba(0,0,0,0.45)]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-[520px] rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,#3a3a3a_0%,#272727_100%)] p-5 shadow-[0_25px_80px_rgba(0,0,0,0.45)]">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="rounded-xl bg-[#444] px-4 py-2 text-sm font-black text-white">
-              Jogador
-            </div>
+            <div className="rounded-xl bg-[#444] px-4 py-2 text-sm font-black text-white">Jogador</div>
             {isAdmin ? (
               <div className="rounded-xl bg-[#228b12] px-3 py-2 text-xs font-black uppercase text-white">
                 Admin
@@ -336,7 +339,7 @@ function SettingsModal({ open, me, isAdmin, onClose, onPickRole }: SettingsModal
           </button>
         </div>
 
-        <div className="mb-5 flex items-center gap-4 rounded-[22px] bg-white/5 p-4">
+        <div className="mb-5 flex items-center gap-4 rounded-[20px] bg-white/5 p-4">
           <PersonBadge name={me?.name || 'Jogador'} crowned={isAdmin} />
           <div className="flex-1">
             <p className="text-sm font-black text-white/65">Apelido</p>
@@ -346,7 +349,7 @@ function SettingsModal({ open, me, isAdmin, onClose, onPickRole }: SettingsModal
           </div>
         </div>
 
-        <div className="rounded-[24px] bg-black p-4">
+        <div className="rounded-[22px] bg-black p-4">
           <p className="mb-4 text-center text-xl font-black text-white">Selecionar papel</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <button
@@ -665,7 +668,7 @@ export default function RoomPage() {
       detailedHintHistory: [
         ...(extendedState.detailedHintHistory || []),
         {
-          word: hintWord.trim(),
+          word: hintWord.trim().toUpperCase(),
           count: hintCount,
           team: me.team,
           picks: [],
@@ -733,140 +736,8 @@ export default function RoomPage() {
   const canReveal = isMyTurn && !isSpymaster && !!extendedState.hint && extendedState.phase === 'playing'
   const canGiveHint = isMyTurn && isSpymaster && !extendedState.hint && extendedState.phase === 'playing'
 
-  if (phase === 'lobby') {
-    return (
-      <div className="h-screen overflow-hidden bg-[linear-gradient(180deg,#05070d_0%,#101a29_16%,#1f344b_58%,#24415b_100%)] text-white">
-        <SettingsModal
-          open={settingsOpen}
-          me={me}
-          isAdmin={!!isAdmin}
-          onClose={() => setSettingsOpen(false)}
-          onPickRole={handleSetTeamRole}
-        />
-
-        <div className="mx-auto flex h-screen w-full max-w-[1600px] flex-col px-4 py-3">
-          <header className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-md">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-black">
-                {me?.name || 'Jogador'}
-              </div>
-              {isAdmin ? (
-                <div className="rounded-full bg-[#238b16] px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-white">
-                  Admin
-                </div>
-              ) : null}
-            </div>
-
-            <div className="text-center">
-              <p className="text-xs uppercase tracking-[0.24em] text-white/45">Sala</p>
-              <h1 className="text-2xl font-black uppercase tracking-[0.08em]">{roomId}</h1>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setSettingsOpen(true)}
-                className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] transition hover:border-white/40 hover:bg-white/10"
-              >
-                Configuracoes
-              </button>
-              <button
-                onClick={copyCode}
-                className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] transition hover:border-white/40 hover:bg-white/10"
-              >
-                {copied ? 'Codigo copiado' : 'Copiar codigo'}
-              </button>
-              <button
-                onClick={handleStartGame}
-                className="rounded-full border border-[#8cd45c]/45 bg-gradient-to-b from-[#35c000] to-[#247d00] px-5 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white shadow-[0_12px_30px_rgba(37,125,0,0.35)] transition hover:brightness-110"
-              >
-                Iniciar jogo
-              </button>
-            </div>
-          </header>
-
-          <div className="mb-3 rounded-[24px] border border-white/10 bg-black/18 px-6 py-3 text-center backdrop-blur-md">
-            <p className="text-xs uppercase tracking-[0.34em] text-white/45">Status da sala</p>
-            <h2 className="mt-1 text-2xl font-black uppercase tracking-[0.02em]">
-              O time azul precisa de um mestre-espiao
-            </h2>
-          </div>
-
-          {spectators.length > 0 ? (
-            <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
-              <span className="text-[11px] font-black uppercase tracking-[0.24em] text-white/40">
-                Espectadores
-              </span>
-              {spectators.map((player) => (
-                <span
-                  key={player.id}
-                  className={cn(
-                    'rounded-full border px-3 py-1 text-xs font-bold',
-                    player.id === me?.id
-                      ? 'border-white/30 bg-white/12 text-white'
-                      : 'border-white/10 bg-black/18 text-white/65'
-                  )}
-                >
-                  {player.name}
-                </span>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[235px_minmax(0,1fr)_235px]">
-            <TeamSidebar
-              team="blue"
-              players={bluePlayers}
-              me={me}
-              remaining={extendedState.blueLeft}
-              onPickRole={handleSetTeamRole}
-            />
-
-            <main className="flex min-h-0 flex-col items-center justify-center rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,20,32,0.88),rgba(30,53,77,0.65))] p-4 shadow-2xl backdrop-blur-md">
-              <div className="grid w-full max-w-[1120px] grid-cols-5 gap-3">
-                {extendedState.cards.map((card, index) => {
-                  const { outerClass, innerClass, labelClass } = getCardClasses(card.team, false)
-
-                  return (
-                    <div
-                      key={`${card.word}-${index}`}
-                      className={cn(
-                        'aspect-[1.28/0.74] rounded-[20px] border p-2 shadow-[0_16px_26px_rgba(0,0,0,0.16)]',
-                        outerClass
-                      )}
-                    >
-                      <div className={cn('h-full rounded-[16px] border p-2', innerClass)}>
-                        <div className="flex h-full rounded-[14px] border border-white/20 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.05))] p-2">
-                          <div
-                            className={cn(
-                              'flex w-full items-center justify-center rounded-[12px] px-3 text-center text-[clamp(0.74rem,0.9vw,1rem)] font-black uppercase tracking-[0.01em] leading-[1.02] [overflow-wrap:anywhere]',
-                              labelClass
-                            )}
-                          >
-                            {card.word}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </main>
-
-            <TeamSidebar
-              team="red"
-              players={redPlayers}
-              me={me}
-              remaining={extendedState.redLeft}
-              onPickRole={handleSetTeamRole}
-            />
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="h-screen overflow-hidden bg-[linear-gradient(180deg,#05070d_0%,#101a29_16%,#1f344b_58%,#2a4967_100%)] text-white">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#05070d_0%,#101a29_16%,#1f344b_58%,#2a4967_100%)] text-white">
       <SettingsModal
         open={settingsOpen}
         me={me}
@@ -875,10 +746,10 @@ export default function RoomPage() {
         onPickRole={handleSetTeamRole}
       />
 
-      <div className="mx-auto flex h-screen w-full max-w-[1760px] flex-col px-4 py-3">
-        <header className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-md">
-          <div className="flex items-center gap-2">
-            <div className="text-xl font-black uppercase tracking-[0.08em]">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1760px] flex-col px-3 py-3 sm:px-4">
+        <header className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-md">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-lg font-black uppercase tracking-[0.08em] sm:text-xl">
               <span className="text-white">Code</span>
               <span className="text-[#ff6d5a]">Names</span>
             </div>
@@ -904,7 +775,7 @@ export default function RoomPage() {
           {extendedState.phase === 'finished' ? (
             <div
               className={cn(
-                'rounded-full px-7 py-3 text-sm font-black uppercase tracking-[0.2em] text-white shadow-lg',
+                'rounded-full px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-white shadow-lg sm:px-7 sm:text-sm',
                 extendedState.winner === 'red' ? 'bg-[#d85b49]' : 'bg-[#3f8ed8]'
               )}
             >
@@ -913,7 +784,7 @@ export default function RoomPage() {
           ) : (
             <div
               className={cn(
-                'rounded-full px-7 py-3 text-sm font-black uppercase tracking-[0.2em] text-white shadow-lg',
+                'rounded-full px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-white shadow-lg sm:px-7 sm:text-sm',
                 extendedState.currentTurn === 'red' ? 'bg-[#d85b49]' : 'bg-[#3f8ed8]'
               )}
             >
@@ -921,7 +792,7 @@ export default function RoomPage() {
             </div>
           )}
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs">
               <span className="mr-2 font-black text-[#ff8b7d]">{extendedState.redLeft}</span>
               <span className="text-white/45">restantes</span>
@@ -938,31 +809,37 @@ export default function RoomPage() {
           </div>
         </header>
 
-        <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[235px_minmax(0,1fr)_235px]">
-          <TeamSidebar
-            team="red"
-            players={redPlayers}
-            me={me}
-            remaining={extendedState.redLeft}
-            onPickRole={handleSetTeamRole}
-          />
+        <div className="grid gap-4 xl:grid-cols-[230px_minmax(0,1fr)_230px]">
+          <div className="order-2 xl:order-1">
+            <TeamSidebar
+              team="red"
+              players={redPlayers}
+              me={me}
+              remaining={extendedState.redLeft}
+              onPickRole={handleSetTeamRole}
+            />
+          </div>
 
-          <main className="flex min-h-0 flex-col rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,20,32,0.84),rgba(42,73,103,0.72))] p-4 shadow-2xl backdrop-blur-md">
+          <main className="order-1 flex min-h-0 flex-col rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,20,32,0.84),rgba(42,73,103,0.72))] p-3 shadow-2xl backdrop-blur-md xl:order-2 xl:p-4">
             <div className="mb-4 text-center">
               {extendedState.hint ? (
                 <div
                   className={cn(
-                    'mx-auto inline-flex flex-wrap items-center justify-center gap-4 rounded-full border px-5 py-2.5',
+                    'mx-auto inline-flex flex-wrap items-center justify-center gap-3 rounded-full border px-4 py-2.5 sm:gap-4 sm:px-5',
                     extendedState.hint.team === 'red'
                       ? 'border-[#d85b49]/40 bg-[#d85b49]/12'
                       : 'border-[#3f8ed8]/40 bg-[#3f8ed8]/12'
                   )}
                 >
-                  <span className="text-xs uppercase tracking-[0.26em] text-white/45">Dica</span>
-                  <span className="text-3xl font-black uppercase">{extendedState.hint.word}</span>
+                  <span className="text-[11px] uppercase tracking-[0.26em] text-white/45 sm:text-xs">
+                    Dica
+                  </span>
+                  <span className="text-2xl font-black uppercase sm:text-3xl">
+                    {extendedState.hint.word}
+                  </span>
                   <span
                     className={cn(
-                      'rounded-full px-4 py-2 text-xl font-black',
+                      'rounded-full px-4 py-2 text-lg font-black sm:text-xl',
                       extendedState.hint.team === 'red'
                         ? 'bg-[#d85b49] text-white'
                         : 'bg-[#3f8ed8] text-white'
@@ -970,27 +847,27 @@ export default function RoomPage() {
                   >
                     {extendedState.hint.count}
                   </span>
-                  <span className="text-xs text-white/60">
+                  <span className="text-[11px] text-white/60 sm:text-xs">
                     {extendedState.hint.guessesLeft} tentativa
                     {extendedState.hint.guessesLeft !== 1 ? 's' : ''}
                   </span>
                   {isMyTurn && !isSpymaster ? (
                     <button
                       onClick={handlePassTurn}
-                      className="rounded-full border border-white/15 bg-white/8 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] transition hover:bg-white/12"
+                      className="rounded-full border border-white/15 bg-white/8 px-4 py-2 text-[11px] font-black uppercase tracking-[0.14em] transition hover:bg-white/12 sm:text-xs"
                     >
                       Passar
                     </button>
                   ) : null}
                 </div>
               ) : canGiveHint ? (
-                <div className="mx-auto flex max-w-[640px] flex-wrap items-center justify-center gap-3">
+                <div className="mx-auto flex max-w-[680px] flex-col items-stretch justify-center gap-3 sm:flex-row">
                   <input
                     value={hintWord}
                     onChange={(event) => setHintWord(event.target.value)}
                     onKeyDown={(event) => event.key === 'Enter' && handleHintSubmit()}
                     placeholder="Palavra-dica"
-                    className="min-w-[240px] flex-1 rounded-full border border-white/15 bg-[#0b121d] px-5 py-3 text-lg text-white outline-none transition placeholder:text-white/25 focus:border-white/35"
+                    className="min-w-0 flex-1 rounded-full border border-white/15 bg-[#0b121d] px-5 py-3 text-lg text-white outline-none transition placeholder:text-white/25 focus:border-white/35"
                   />
                   <select
                     value={hintCount}
@@ -1015,7 +892,7 @@ export default function RoomPage() {
                   </button>
                 </div>
               ) : (
-                <div className="rounded-full border border-white/10 bg-white/5 px-5 py-3 text-xs uppercase tracking-[0.2em] text-white/35">
+                <div className="rounded-full border border-white/10 bg-white/5 px-5 py-3 text-[11px] uppercase tracking-[0.2em] text-white/35 sm:text-xs">
                   {extendedState.phase === 'playing'
                     ? isSpymaster
                       ? 'Clique nas cartas do seu time para marcar sua leitura'
@@ -1025,8 +902,8 @@ export default function RoomPage() {
               )}
             </div>
 
-            <div className="grid min-h-0 flex-1 place-items-center">
-              <div className="grid w-full max-w-[1140px] grid-cols-5 gap-3">
+            <div className="grid flex-1 place-items-center">
+              <div className="grid w-full max-w-[1140px] grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
                 {extendedState.cards.map((card, index) => {
                   const visible = card.revealed || isSpymaster
                   const { outerClass, innerClass, labelClass } = getCardClasses(card.team, visible)
@@ -1039,7 +916,7 @@ export default function RoomPage() {
                       onClick={() => handleCardClick(index)}
                       disabled={me?.role !== 'spymaster' && (!canReveal || card.revealed)}
                       className={cn(
-                        'group relative aspect-[1.28/0.74] rounded-[20px] border p-2 text-left shadow-[0_14px_24px_rgba(0,0,0,0.2)] transition duration-150',
+                        'group relative aspect-[1.34/0.78] rounded-[18px] border p-2 text-left shadow-[0_14px_24px_rgba(0,0,0,0.2)] transition duration-150',
                         outerClass,
                         !card.revealed &&
                           (canReveal || isSpymaster) &&
@@ -1055,7 +932,7 @@ export default function RoomPage() {
                             event.stopPropagation()
                             handleConfirmReveal()
                           }}
-                          className="absolute right-2 top-2 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-[#baff8c]/50 bg-[#45bb18] text-xl text-white shadow-[0_8px_18px_rgba(69,187,24,0.35)] transition hover:brightness-110"
+                          className="absolute right-2 top-2 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-[#baff8c]/50 bg-[#45bb18] text-lg text-white shadow-[0_8px_18px_rgba(69,187,24,0.35)] transition hover:brightness-110 sm:h-12 sm:w-12 sm:text-xl"
                           aria-label="Confirmar carta"
                         >
                           ☝
@@ -1063,16 +940,16 @@ export default function RoomPage() {
                       ) : null}
 
                       {isSpymaster && spySelected ? (
-                        <div className="absolute right-2 top-2 z-10 rounded-full bg-[#3ea900] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-lg">
+                        <div className="absolute right-2 top-2 z-10 rounded-full bg-[#3ea900] px-3 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-white shadow-lg sm:text-[10px]">
                           Selecionada
                         </div>
                       ) : null}
 
-                      <div className={cn('flex h-full rounded-[16px] border p-2', innerClass)}>
-                        <div className="flex h-full w-full rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.03))] p-2">
+                      <div className={cn('flex h-full rounded-[14px] border p-2', innerClass)}>
+                        <div className="flex h-full w-full rounded-[12px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.03))] p-2">
                           <div
                             className={cn(
-                              'flex w-full items-center justify-center rounded-[12px] px-3 text-center text-[clamp(0.74rem,0.9vw,1rem)] font-black uppercase tracking-[0.01em] leading-[1.02] [overflow-wrap:anywhere]',
+                              'flex w-full items-center justify-center rounded-[10px] px-2 text-center text-[clamp(0.72rem,0.9vw,1rem)] font-black uppercase tracking-[0.01em] leading-[1.02] [overflow-wrap:anywhere]',
                               labelClass
                             )}
                           >
@@ -1109,13 +986,15 @@ export default function RoomPage() {
             ) : null}
           </main>
 
-          <TeamSidebar
-            team="blue"
-            players={bluePlayers}
-            me={me}
-            remaining={extendedState.blueLeft}
-            onPickRole={handleSetTeamRole}
-          />
+          <div className="order-3">
+            <TeamSidebar
+              team="blue"
+              players={bluePlayers}
+              me={me}
+              remaining={extendedState.blueLeft}
+              onPickRole={handleSetTeamRole}
+            />
+          </div>
         </div>
       </div>
     </div>
