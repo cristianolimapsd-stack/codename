@@ -1,108 +1,236 @@
-import type { Card, GameState, Team } from '@/types/game'
-import { getWordBank } from './wordbanks'
+import type { GameState } from '@/types/game'
 
-export function generateBoard(themes: string[], customWords: string[]): Card[] {
-  const pool = getWordBank(themes, customWords)
-  if (pool.length < 25) throw new Error('Palavras insuficientes para gerar o tabuleiro.')
+const THEME_WORDS: Record<string, string[]> = {
+  geral: [
+    'casa',
+    'ponte',
+    'rio',
+    'gato',
+    'fogo',
+    'neve',
+    'aviao',
+    'praia',
+    'sol',
+    'lua',
+    'floresta',
+    'livro',
+    'janela',
+    'porta',
+    'carro',
+    'chuva',
+    'tigre',
+    'cafe',
+    'escola',
+    'relogio',
+    'bateria',
+    'cidade',
+    'fazenda',
+    'telefone',
+    'castelo',
+    'espada',
+    'pintura',
+    'oceano',
+    'montanha',
+    'cinema',
+    'hospital',
+    'mercado',
+    'jardim',
+    'computador',
+    'prato',
+    'espelho',
+    'papel',
+    'cadeira',
+    'mesa',
+    'estrada',
+    'viagem',
+    'caneta',
+    'boneco',
+    'museu',
+    'circo',
+    'navio',
+    'ilha',
+    'deserto',
+    'piano',
+    'escritorio',
+  ],
 
-  const shuffled = pool.sort(() => Math.random() - 0.5).slice(0, 25)
+  valorant: [
+    'jett',
+    'reyna',
+    'sage',
+    'brimstone',
+    'omen',
+    'viper',
+    'raze',
+    'sova',
+    'cypher',
+    'killjoy',
+    'yoru',
+    'phoenix',
+    'ascent',
+    'bind',
+    'haven',
+    'split',
+    'lotus',
+    'sunset',
+    'pearl',
+    'fracture',
+    'vandal',
+    'phantom',
+    'operator',
+    'ghost',
+    'sheriff',
+    'marshal',
+    'spectre',
+    'judge',
+    'classic',
+    'bulldog',
+    'spike',
+    'plant',
+    'defuse',
+    'clutch',
+    'eco',
+    'mid',
+    'smoke',
+    'flash',
+    'ult',
+    'heaven',
+    'hookah',
+    'site',
+    'duelista',
+    'sentinela',
+    'controlador',
+    'iniciador',
+    'armadura',
+    'headshot',
+    'retake',
+    'wallbang',
+  ],
 
-  // Distribuição: 9 red, 8 blue, 7 neutral, 1 assassin (red começa)
-  const teams: Team[] = [
-    ...Array(9).fill('red'),
-    ...Array(8).fill('blue'),
+  'marvel-rivals': [
+    'ironman',
+    'spiderman',
+    'hulk',
+    'thor',
+    'loki',
+    'storm',
+    'magneto',
+    'scarletwitch',
+    'doctorstrange',
+    'blackpanther',
+    'rocket',
+    'groot',
+    'mantis',
+    'punisher',
+    'hela',
+    'venom',
+    'namor',
+    'magik',
+    'starlord',
+    'jeff',
+    'wanda',
+    'banner',
+    'mjolnir',
+    'bifrost',
+    'symbiote',
+    'wakanda',
+    'xmen',
+    'avengers',
+    'hydra',
+    'multiverse',
+    'portal',
+    'healer',
+    'tank',
+    'duelist',
+    'ultimate',
+    'shield',
+    'teleport',
+    'web',
+    'gamma',
+    'asgard',
+    'vibranium',
+    'mutant',
+    'sniper',
+    'melee',
+    'arena',
+    'payload',
+    'objective',
+    'capture',
+    'respawn',
+    'guardian',
+  ],
+}
+
+function shuffle<T>(array: T[]) {
+  const copy = [...array]
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[copy[i], copy[j]] = [copy[j], copy[i]]
+  }
+  return copy
+}
+
+function randomStartingTeam(): 'red' | 'blue' {
+  return Math.random() < 0.5 ? 'red' : 'blue'
+}
+
+export function createInitialState(selectedThemes: string[], customWords: string[] = []): GameState {
+  const themeWords = selectedThemes.flatMap((theme) => THEME_WORDS[theme] ?? [])
+  const wordsPool = [...themeWords, ...customWords].map((word) => word.trim()).filter(Boolean)
+
+  if (wordsPool.length < 25) {
+    throw new Error('Palavras insuficientes para gerar o tabuleiro. Adicione mais temas ou palavras.')
+  }
+
+  const startingTeam = randomStartingTeam()
+  const redCount = startingTeam === 'red' ? 9 : 8
+  const blueCount = startingTeam === 'blue' ? 9 : 8
+
+  const roles = shuffle([
+    ...Array(redCount).fill('red'),
+    ...Array(blueCount).fill('blue'),
     ...Array(7).fill('neutral'),
     'assassin',
-  ].sort(() => Math.random() - 0.5) as Team[]
+  ])
 
-  return shuffled.map((word, i) => ({
-    word,
-    team: teams[i],
+  const selectedWords = shuffle(wordsPool).slice(0, 25)
+
+  const cards = selectedWords.map((word, index) => ({
+    word: word.toUpperCase(),
+    team: roles[index],
     revealed: false,
   }))
-}
 
-export function createInitialState(themes: string[], customWords: string[]): GameState {
-  const cards = generateBoard(themes, customWords)
   return {
+    phase: 'lobby',
+    theme: selectedThemes,
     cards,
-    currentTurn: 'red',
-    phase: 'playing',
-    winner: null,
+    currentTurn: startingTeam,
+    redLeft: redCount,
+    blueLeft: blueCount,
     hint: null,
     hintHistory: [],
-    redLeft: 9,
-    blueLeft: 8,
-    theme: themes.join(','),
+    winner: null,
   }
 }
 
-export function revealCard(state: GameState, index: number): GameState {
-  if (state.phase !== 'playing') return state
-  if (state.cards[index].revealed) return state
-
-  const newCards = state.cards.map((c, i) =>
-    i === index ? { ...c, revealed: true } : c
-  )
-  const card = newCards[index]
-  let { redLeft, blueLeft, winner, currentTurn, hint } = state
-
-  // Assassino: time atual perde
-  if (card.team === 'assassin') {
-    winner = currentTurn === 'red' ? 'blue' : 'red'
-    return { ...state, cards: newCards, winner, phase: 'finished' }
-  }
-
-  if (card.team === 'red') redLeft--
-  if (card.team === 'blue') blueLeft--
-
-  if (redLeft === 0) winner = 'red'
-  if (blueLeft === 0) winner = 'blue'
-
-  // Se errou (revelou carta neutra ou do adversário) → passa turno
-  let newHint = hint
-  if (card.team !== currentTurn) {
-    currentTurn = currentTurn === 'red' ? 'blue' : 'red'
-    newHint = null
-  } else if (hint) {
-    // Acertou: decrementa tentativas restantes
-    const guessesLeft = hint.guessesLeft - 1
-    if (guessesLeft <= 0) {
-      currentTurn = currentTurn === 'red' ? 'blue' : 'red'
-      newHint = null
-    } else {
-      newHint = { ...hint, guessesLeft }
-    }
-  }
-
+export function applyHint(state: GameState, word: string, count: number): GameState {
   return {
     ...state,
-    cards: newCards,
-    redLeft,
-    blueLeft,
-    winner,
-    currentTurn,
-    hint: newHint,
-    phase: winner ? 'finished' : 'playing',
-  }
-}
-
-export function applyHint(
-  state: GameState,
-  word: string,
-  count: number
-): GameState {
-  if (state.phase !== 'playing') return state
-  const hint = {
-    word,
-    count,
-    team: state.currentTurn as 'red' | 'blue',
-    guessesLeft: count + 1, // +1 hint bonus
-  }
-  return {
-    ...state,
-    hint,
-    hintHistory: [hint, ...state.hintHistory],
+    hint: {
+      word: word.toUpperCase(),
+      count,
+      team: state.currentTurn,
+      guessesLeft: count === 0 ? 99 : count + 1,
+    },
+    hintHistory: [
+      {
+        word: word.toUpperCase(),
+        count,
+        team: state.currentTurn,
+      },
+      ...state.hintHistory,
+    ],
   }
 }
 
@@ -111,5 +239,66 @@ export function passTurn(state: GameState): GameState {
     ...state,
     currentTurn: state.currentTurn === 'red' ? 'blue' : 'red',
     hint: null,
+  }
+}
+
+export function revealCard(state: GameState, index: number): GameState {
+  const card = state.cards[index]
+  if (!card || card.revealed) return state
+
+  const cards = state.cards.map((item, itemIndex) =>
+    itemIndex === index ? { ...item, revealed: true } : item
+  )
+
+  let redLeft = state.redLeft
+  let blueLeft = state.blueLeft
+  let winner = state.winner
+  let currentTurn = state.currentTurn
+  let hint = state.hint
+
+  if (card.team === 'red') redLeft -= 1
+  if (card.team === 'blue') blueLeft -= 1
+
+  if (redLeft <= 0) {
+    winner = 'red'
+  }
+
+  if (blueLeft <= 0) {
+    winner = 'blue'
+  }
+
+  if (card.team === 'assassin') {
+    winner = state.currentTurn === 'red' ? 'blue' : 'red'
+  }
+
+  if (!winner && hint) {
+    const hitOwnTeam = card.team === state.currentTurn
+
+    if (hitOwnTeam) {
+      const nextGuesses = hint.guessesLeft - 1
+      if (nextGuesses <= 0) {
+        currentTurn = state.currentTurn === 'red' ? 'blue' : 'red'
+        hint = null
+      } else {
+        hint = {
+          ...hint,
+          guessesLeft: nextGuesses,
+        }
+      }
+    } else {
+      currentTurn = state.currentTurn === 'red' ? 'blue' : 'red'
+      hint = null
+    }
+  }
+
+  return {
+    ...state,
+    cards,
+    redLeft,
+    blueLeft,
+    currentTurn,
+    hint,
+    winner,
+    phase: winner ? 'finished' : 'playing',
   }
 }
