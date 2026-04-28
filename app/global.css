@@ -8,8 +8,25 @@
   padding: 0;
 }
 
-html, body {
-  height: 100%;
+html,
+body {
+  min-height: 100%;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  color: white;
+  background: #0a1018;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 ::selection {
@@ -18,7 +35,8 @@ html, body {
 }
 
 ::-webkit-scrollbar {
-  width: 4px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -27,5 +45,5 @@ html, body {
 
 ::-webkit-scrollbar-thumb {
   background: #2a2d3e;
-  border-radius: 2px;
+  border-radius: 999px;
 }
