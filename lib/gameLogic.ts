@@ -60,7 +60,6 @@ const THEME_WORDS: Record<string, string[]> = {
     'foguete',
     'martelo',
     'farol',
-    'janela',
     'garfo',
     'areia',
     'banco',
@@ -71,7 +70,7 @@ const THEME_WORDS: Record<string, string[]> = {
     'parque',
     'caderno',
     'fotografia',
-    'praça',
+    'praca',
     'estatua',
     'violin',
     'lanterna',
@@ -152,7 +151,6 @@ const THEME_WORDS: Record<string, string[]> = {
     'orb',
     'ace',
     'pistol',
-    'operator',
     'rush',
     'rotate',
     'default',
@@ -283,7 +281,7 @@ const THEME_WORDS: Record<string, string[]> = {
     'avengerstower',
     'dailybugle',
     'sanctum',
-    'helcarrier',
+    'hellicarrier',
     'latveria',
     'krakoa',
     'hellfire',
@@ -299,10 +297,12 @@ const THEME_WORDS: Record<string, string[]> = {
 
 function shuffle<T>(array: T[]) {
   const copy = [...array]
+
   for (let i = copy.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1))
     ;[copy[i], copy[j]] = [copy[j], copy[i]]
   }
+
   return copy
 }
 
@@ -310,9 +310,14 @@ function randomStartingTeam(): 'red' | 'blue' {
   return Math.random() < 0.5 ? 'red' : 'blue'
 }
 
-export function createInitialState(selectedThemes: string[], customWords: string[] = []): GameState {
+export function createInitialState(
+  selectedThemes: string[],
+  customWords: string[] = []
+): GameState {
   const themeWords = selectedThemes.flatMap((theme) => THEME_WORDS[theme] ?? [])
-  const wordsPool = [...themeWords, ...customWords].map((word) => word.trim()).filter(Boolean)
+  const wordsPool = [...themeWords, ...customWords]
+    .map((word) => word.trim())
+    .filter(Boolean)
 
   if (wordsPool.length < 25) {
     throw new Error('Palavras insuficientes para gerar o tabuleiro. Adicione mais temas ou palavras.')
@@ -338,33 +343,36 @@ export function createInitialState(selectedThemes: string[], customWords: string
   }))
 
   return {
-  phase: 'lobby',
-  theme: selectedThemes.length > 0 ? selectedThemes.join(', ') : 'geral',
-  cards,
-  currentTurn: startingTeam,
-  redLeft: redCount,
-  blueLeft: blueCount,
-  hint: null,
-  hintHistory: [],
-  winner: null,
-}
-
+    phase: 'lobby',
+    theme: selectedThemes.length > 0 ? selectedThemes.join(', ') : 'geral',
+    cards,
+    currentTurn: startingTeam,
+    redLeft: redCount,
+    blueLeft: blueCount,
+    hint: null,
+    hintHistory: [],
+    winner: null,
+  }
 }
 
 export function applyHint(state: GameState, word: string, count: number): GameState {
+  const normalizedWord = word.toUpperCase()
+  const guessesLeft = count === 0 ? 99 : count + 1
+
   return {
     ...state,
     hint: {
-      word: word.toUpperCase(),
+      word: normalizedWord,
       count,
       team: state.currentTurn,
-      guessesLeft: count === 0 ? 99 : count + 1,
+      guessesLeft,
     },
     hintHistory: [
       {
-        word: word.toUpperCase(),
+        word: normalizedWord,
         count,
         team: state.currentTurn,
+        guessesLeft,
       },
       ...state.hintHistory,
     ],
@@ -381,7 +389,10 @@ export function passTurn(state: GameState): GameState {
 
 export function revealCard(state: GameState, index: number): GameState {
   const card = state.cards[index]
-  if (!card || card.revealed) return state
+
+  if (!card || card.revealed) {
+    return state
+  }
 
   const cards = state.cards.map((item, itemIndex) =>
     itemIndex === index ? { ...item, revealed: true } : item
@@ -408,6 +419,7 @@ export function revealCard(state: GameState, index: number): GameState {
 
     if (hitOwnTeam) {
       const nextGuesses = hint.guessesLeft - 1
+
       if (nextGuesses <= 0) {
         currentTurn = state.currentTurn === 'red' ? 'blue' : 'red'
         hint = null
