@@ -338,16 +338,17 @@ export function createInitialState(selectedThemes: string[], customWords: string
   }))
 
   return {
-    phase: 'lobby',
-    theme: selectedThemes,
-    cards,
-    currentTurn: startingTeam,
-    redLeft: redCount,
-    blueLeft: blueCount,
-    hint: null,
-    hintHistory: [],
-    winner: null,
-  }
+  phase: 'lobby',
+  theme: selectedThemes.length > 0 ? selectedThemes.join(', ') : 'geral',
+  cards,
+  currentTurn: startingTeam,
+  redLeft: redCount,
+  blueLeft: blueCount,
+  hint: null,
+  hintHistory: [],
+  winner: null,
+}
+
 }
 
 export function applyHint(state: GameState, word: string, count: number): GameState {
